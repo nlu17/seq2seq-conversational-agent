@@ -4,6 +4,8 @@ Seq2seq model + chat agents
 
 [Attention Models] (https://arxiv.org/pdf/1409.0473.pdf)
 
+[Stanford report](https://web.stanford.edu/class/cs224n/reports/2761153.pdf)
+
 
 Code + tutorials
 ======
@@ -15,7 +17,9 @@ Code + tutorials
 
 [Char rnn tf] (https://github.com/sherjilozair/char-rnn-tensorflow)
 
-[Stanford report](https://web.stanford.edu/class/cs224n/reports/2761153.pdf)
+[Denny blog] (http://www.wildml.com/2016/04/deep-learning-for-chatbots-part-1-introduction/)
+
+[Denny blog p2] (http://www.wildml.com/2016/07/deep-learning-for-chatbots-2-retrieval-based-model-tensorflow/)
 
 [Github awesome nlp] (https://github.com/keon/awesome-nlp)
 
