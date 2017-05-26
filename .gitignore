@@ -1,1 +1,6 @@
 .*
+data/
+model/
+*.zip
+*.gz
+*.tar
