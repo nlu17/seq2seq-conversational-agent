@@ -61,39 +61,39 @@ def main():
 	if not os.path.exists(FLAGS.checkpoint_dir):
 		os.mkdir(FLAGS.checkpoint_dir)
 	path = getCheckpointPath()
-	print "path is {0}".format(path)
+	print("path is {0}".format(path))
 	data_processor = data_utils.DataProcessor(FLAGS.vocab_size,
 		FLAGS.raw_data_dir,FLAGS.data_dir, FLAGS.train_frac, FLAGS.tokenizer,
 		max_num_lines, max_target_length, max_source_length, FLAGS.is_discrete,
 		FLAGS.extra_discrete_data)
 	data_processor.run()
 	#create model
-	print "Creating model with..."
-	print "Number of hidden layers: {0}".format(FLAGS.num_layers)
-	print "Number of units per layer: {0}".format(FLAGS.hidden_size)
-	print "Dropout: {0}".format(FLAGS.dropout)
+	print("Creating model with...")
+	print("Number of hidden layers: {0}".format(FLAGS.num_layers))
+	print("Number of units per layer: {0}".format(FLAGS.hidden_size))
+	print("Dropout: {0}".format(FLAGS.dropout))
 	vocab_mapper = vocab_utils.VocabMapper(FLAGS.data_dir)
 	vocab_size = vocab_mapper.getVocabSize()
-	print "Vocab size is: {0}".format(vocab_size)
+	print("Vocab size is: {0}".format(vocab_size))
 	FLAGS.vocab_size = vocab_size
 	with tf.Session() as sess:
 		writer = tf.train.SummaryWriter("/tmp/tb_logs_chatbot", sess.graph)
 		model = createModel(sess, path, vocab_size)
-		print "Using bucket sizes:"
-		print _buckets
+		print("Using bucket sizes:")
+		print(_buckets)
 		#train model and save to checkpoint
-		print "Beggining training..."
-		print "Maximum number of epochs to train for: {0}".format(FLAGS.max_epoch)
-		print "Batch size: {0}".format(FLAGS.batch_size)
-		print "Starting learning rate: {0}".format(FLAGS.learning_rate)
-		print "Learning rate decay factor: {0}".format(FLAGS.lr_decay_factor)
+		print("Beggining training...")
+		print("Maximum number of epochs to train for: {0}".format(FLAGS.max_epoch))
+		print("Batch size: {0}".format(FLAGS.batch_size))
+		print("Starting learning rate: {0}".format(FLAGS.learning_rate))
+		print("Learning rate decay factor: {0}".format(FLAGS.lr_decay_factor))
 
 		source_train_file_path = data_processor.data_source_train
 		target_train_file_path = data_processor.data_target_train
 		source_test_file_path = data_processor.data_source_test
 		target_test_file_path = data_processor.data_target_test
-		print source_train_file_path
-		print target_train_file_path
+		print(source_train_file_path)
+		print(target_train_file_path)
 
 		train_set = readData(source_train_file_path, target_train_file_path,
 			FLAGS.max_train_data_size)
@@ -101,7 +101,7 @@ def main():
 			FLAGS.max_train_data_size)
 
 		train_bucket_sizes = [len(train_set[b]) for b in xrange(len(_buckets))]
-		print "bucket sizes = {0}".format(train_bucket_sizes)
+		print("bucket sizes = {0}".format(train_bucket_sizes))
 		train_total_size = float(sum(train_bucket_sizes))
 
 		train_buckets_scale = [sum(train_bucket_sizes[:i + 1]) / train_total_size
@@ -135,7 +135,7 @@ def main():
 				writer.add_summary(train_loss_summary, current_step)
 				# Print statistics for the previous epoch.
 				perplexity = math.exp(loss) if loss < 300 else float('inf')
-				print ("global step %d learning rate %.4f step-time %.2f perplexity "
+				print("global step %d learning rate %.4f step-time %.2f perplexity "
 					"%.2f" % (model.global_step.eval(), model.learning_rate.eval(),
 						 step_time, perplexity))
 				# Decrease learning rate if no improvement was seen over last 3 times.
@@ -169,7 +169,7 @@ def main():
 					str_summary_eval_loss.tag = "eval_loss_bucket)%d" % bucket_id
 					writer.add_summary(perplexity_summary, current_step)
 					writer.add_summary(eval_loss_summary, current_step)
-				sys.stdout.flush()
+                sys.stdout.flush()
 
 
 def createModel(session, path, vocab_size):
@@ -180,13 +180,13 @@ def createModel(session, path, vocab_size):
 			config.getint("max_data_sizes", "max_target_length"),
 			config.getint("max_data_sizes", "num_lines")]
 	hyper_params.saveHyperParameters(path, FLAGS, _buckets, convo_limits)
-	print path
+	print(path)
 	ckpt = tf.train.get_checkpoint_state(path)
 	if ckpt and gfile.Exists(ckpt.model_checkpoint_path):
-		print "Reading model parameters from {0}".format(ckpt.model_checkpoint_path)
+		print("Reading model parameters from {0}".format(ckpt.model_checkpoint_path))
 		model.saver.restore(session, ckpt.model_checkpoint_path)
 	else:
-		print "Created model with fresh parameters."
+		print("Created model with fresh parameters.")
 		session.run(tf.initialize_all_variables())
 	return model
 
@@ -203,7 +203,7 @@ def setBuckets(raw_info):
 			target, source = tu[1].strip().split(",")
 			buckets.append((int(target), int(source)))
 	except:
-		print "Erorr in config file formatting..."
+		print("Erorr in config file formatting...")
 	return buckets
 
 
@@ -256,7 +256,7 @@ def getCheckpointPath():
 			return FLAGS.checkpoint_dir
 		else:
 			_buckets = setBuckets(config.items("buckets"))
-			print _buckets
+			print(_buckets)
 			infostring = "hiddensize_{0}_dropout_{1}_numlayers_{2}".format(FLAGS.hidden_size,
 			FLAGS.dropout, FLAGS.num_layers)
 			if not os.path.exists("data/checkpoints/"):
@@ -264,11 +264,11 @@ def getCheckpointPath():
 			path = os.path.join("data/checkpoints/", str(int(time.time())) + infostring)
 			if not os.path.exists(path):
 				os.makedirs(path)
-			print "hyper parameters changed, training new model at {0}".format(path)
+			print("hyper parameters changed, training new model at {0}".format(path))
 			return path
 	else:
 		_buckets = setBuckets(config.items("buckets"))
-		print _buckets
+		print(_buckets)
 		return FLAGS.checkpoint_dir
 
 if __name__ == '__main__':

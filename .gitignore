@@ -4,3 +4,4 @@ model/
 *.zip
 *.gz
 *.tar
+*.pyc
