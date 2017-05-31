@@ -108,30 +108,35 @@ def main():
 			conversation_history = conversation_history[-1:]
 
 def loadModel(session, path):
-	global _buckets
-	global max_source_length
-	global max_target_length
-	params = hyper_params.restoreHyperParams(path)
-	buckets = []
-	num_buckets = params["num_buckets"]
-	max_source_length = params["max_source_length"]
-	max_target_length = params["max_target_length"]
-	for i in range(num_buckets):
-		buckets.append((params["bucket_{0}_target".format(i)],
-			params["bucket_{0}_target".format(i)]))
-		_buckets = buckets
-	model = models.chatbot.ChatbotModel(params["vocab_size"], _buckets,
-		params["hidden_size"], 1.0, params["num_layers"], params["grad_clip"],
-		1, params["learning_rate"], params["lr_decay_factor"], 512, True)
-	ckpt = tf.train.get_checkpoint_state(path)
-	if ckpt and gfile.Exists(ckpt.model_checkpoint_path):
-		print("Reading model parameters from {0}".format(ckpt.model_checkpoint_path))
-		model.saver.restore(session, ckpt.model_checkpoint_path)
-	else:
-		print("Double check you got the checkpoint_dir right...")
-		print("Model not found...")
-		model = None
-	return model
+    global _buckets
+    global max_source_length
+    global max_target_length
+    params = hyper_params.restoreHyperParams(path)
+    buckets = []
+    num_buckets = params["num_buckets"]
+    max_source_length = params["max_source_length"]
+    max_target_length = params["max_target_length"]
+    for i in range(num_buckets):
+        buckets.append((params["bucket_{0}_target".format(i)],
+            params["bucket_{0}_target".format(i)]))
+        _buckets = buckets
+    model = models.chatbot.ChatbotModel(params["vocab_size"], _buckets,
+        params["hidden_size"], 1.0, params["num_layers"], params["grad_clip"],
+        1, params["learning_rate"], params["lr_decay_factor"], 512, True)
+
+#     ckpt = tf.train.get_checkpoint_state(path)
+# 	if ckpt and gfile.Exists(ckpt.model_checkpoint_path):
+# 		print("Reading model parameters from {0}".format(ckpt.model_checkpoint_path))
+# 		model.saver.restore(session, ckpt.model_checkpoint_path)
+# 	else:
+# 		print("Double check you got the checkpoint_dir right...")
+# 		print("Model not found...")
+# 		model = None
+
+    checkpoint_path = path + "/chatbotckpt-26200"
+    print("Reading model parameters from {0}".format(checkpoint_path))
+    model.saver.restore(session, checkpoint_path)
+    return model
 
 
 if __name__=="__main__":
