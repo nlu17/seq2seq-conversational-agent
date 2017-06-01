@@ -23,7 +23,7 @@ DATA_DIR = "data/"
 
 class DataProcessor(object):
     def __init__(self, max_vocab_size, tokenizer_str, train_frac=0.5,
-            max_target_length=500, max_source_length=500):
+            max_target_length=100, max_source_length=100):
         '''
         Inputs:
         max_vocab_size: max size of vocab allowed
@@ -44,7 +44,7 @@ class DataProcessor(object):
         self.test_target_file = os.path.join(DATA_DIR, "test_target.txt")
 
         print("Checking to see what data processor needs to do...")
-        self.vocab_path = os.path.join(DATA_DIR, "vocab.txt")
+        self.vocab_path = os.path.join(DATA_DIR, "vocab.pkl")
 
     def run(self):
         if not os.path.exists(self.train_source_file) \

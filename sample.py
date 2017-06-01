@@ -24,7 +24,6 @@ flags = tf.app.flags
 FLAGS = flags.FLAGS
 flags.DEFINE_string('checkpoint_dir', 'data/checkpoints/1461979205hiddensize_100_dropout_0.5_numlayers_1', 'Directory to store/restore checkpoints')
 flags.DEFINE_string('data_dir', "data/", "Data storage directory")
-flags.DEFINE_string('static_data', '', '(path to static data) Adds fuzzy matching layer on top of chatbot for better static responses')
 flags.DEFINE_integer('static_temp', 60, 'number between 0 and 100. The lower the number the less likely static responses will come up')
 #flags.DEFINE_string('text', 'Hello World!', 'Text to sample with.')
 
@@ -34,23 +33,6 @@ flags.DEFINE_integer('static_temp', 60, 'number between 0 and 100. The lower the
 #Sources are on odd lines n_i, targets are on even lines n_{i+1}
 static_sources = []
 static_targets = []
-if FLAGS.static_data:
-    if os.path.exists(FLAGS.static_data):
-        try:
-            from fuzzywuzzy import fuzz
-            onlyfiles = [f for f in listdir(FLAGS.static_data) if isfile(join(FLAGS.static_data, f))]
-            for f in onlyfiles:
-                with open(os.path.join(FLAGS.static_data, f), 'r') as f2:
-                    file_lines = f2.readlines()
-                    for i in range(0, len(file_lines) - 1, 2):
-                        static_sources.append(file_lines[i].lower().replace('\n', ''))
-                        static_targets.append(file_lines[i+1].lower().replace('\n', ''))
-        except ImportError:
-            print("Package fuzzywuzzy not found")
-            print("Running sampling without fuzzy matching...")
-    else:
-        print("Fuzzy matching data not found... double check static_data path..")
-        print("Not using fuzzy matching... Reverting to normal sampling")
 
 def main():
 	with tf.Session() as sess:
@@ -133,7 +115,7 @@ def loadModel(session, path):
 # 		print("Model not found...")
 # 		model = None
 
-    checkpoint_path = path + "/chatbotckpt-26200"
+    checkpoint_path = path + "/chatbot.ckpt-10000"
     print("Reading model parameters from {0}".format(checkpoint_path))
     model.saver.restore(session, checkpoint_path)
     return model

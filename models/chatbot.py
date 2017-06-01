@@ -42,35 +42,60 @@ class ChatbotModel(object):
         if num_samples > self.vocab_size:
             num_samples = self.vocab_size - 1
         if num_samples > 0 and num_samples < self.vocab_size:
-            with tf.device("/cpu:0"):
-                w = tf.get_variable("proj_w", [hidden_size, self.vocab_size])
-                w_t = tf.transpose(w)
-                b = tf.get_variable("proj_b", [self.vocab_size])
+            w = tf.get_variable("proj_w", [hidden_size, self.vocab_size])
+            w_t = tf.transpose(w)
+            b = tf.get_variable("proj_b", [self.vocab_size])
             output_projection = (w, b)
 
+        #def sampled_loss(labels, inputs):
+        #    labels = tf.reshape(labels, [-1, 1])
+        #    return tf.nn.sampled_softmax_loss(w_t, b, labels, inputs, num_samples,
+        #                                        self.vocab_size)
+        #softmax_loss_function = sampled_loss
+
+        #cell = tf.contrib.rnn.DropoutWrapper(
+        #    tf.contrib.rnn.BasicLSTMCell(hidden_size),
+        #    input_keep_prob=self.dropout_keep_prob_lstm_input,
+        #    output_keep_prob=self.dropout_keep_prob_lstm_output)
+        #if num_layers > 1:
+        #    cell = tf.contrib.rnn.MultiRNNCell([cell] * num_layers)
+
+        #def seq2seq_f(encoder_inputs, decoder_inputs, do_decode):
+        #    return tf.contrib.legacy_seq2seq.embedding_attention_seq2seq(
+        #        encoder_inputs, decoder_inputs, cell, vocab_size,
+        #        vocab_size,hidden_size, output_projection=output_projection,
+        #        feed_previous=do_decode)
+
         def sampled_loss(labels, inputs):
-            with tf.device("/cpu:0"):
-                labels = tf.reshape(labels, [-1, 1])
-                return tf.nn.sampled_softmax_loss(w_t, b, labels, inputs, num_samples,
-                                                  self.vocab_size)
+            labels = tf.reshape(labels, [-1, 1])
+            # We need to compute the sampled_softmax_loss using 32bit floats to
+            # avoid numerical instabilities.
+            local_w_t = tf.cast(w_t, tf.float32)
+            local_b = tf.cast(b, tf.float32)
+            local_inputs = tf.cast(inputs, tf.float32)
+            return tf.cast(
+                        tf.nn.sampled_softmax_loss(
+                            weights=local_w_t,
+                            biases=local_b,
+                            labels=labels,
+                            inputs=local_inputs,
+                            num_sampled=num_samples,
+                            num_classes=self.vocab_size),
+                            dtype=tf.float32)
         softmax_loss_function = sampled_loss
 
-        #e, hidden_size, initializer=tf.random_uniform_initializer(-1.0, 1.0)
+        def single_cell():
+            return tf.contrib.rnn.BasicLSTMCell(hidden_size)
 
-        with tf.variable_scope("lstm") as scope:
-            cell = tf.contrib.rnn.DropoutWrapper(
-                tf.contrib.rnn.BasicLSTMCell(hidden_size),
-                input_keep_prob=self.dropout_keep_prob_lstm_input,
-                output_keep_prob=self.dropout_keep_prob_lstm_output)
-            if num_layers > 1:
-                cell = tf.contrib.rnn.MultiRNNCell([cell] * num_layers)
+        cell = single_cell()
+        if num_layers > 1:
+            cell = tf.contrib.rnn.MultiRNNCell([single_cell() for _ in range(num_layers)])
 
         def seq2seq_f(encoder_inputs, decoder_inputs, do_decode):
-            return tf.contrib.legacy_seq2seq.embedding_attention_seq2seq(
-                encoder_inputs, decoder_inputs, cell, vocab_size,
-                vocab_size,hidden_size, output_projection=output_projection,
-                feed_previous=do_decode)
-
+            return tf.contrib.legacy_seq2seq.embedding_rnn_seq2seq(
+                    encoder_inputs, decoder_inputs, cell, num_encoder_symbols=vocab_size,
+                    num_decoder_symbols=vocab_size, embedding_size=hidden_size,
+                    output_projection=output_projection, feed_previous=do_decode)
 
         # Feeds for inputs.
         self.encoder_inputs = []

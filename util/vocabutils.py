@@ -45,10 +45,17 @@ class VocabBuilder(object):
         vocab_list = _START_VOCAB + sorted(self.vocab, key=self.vocab.get, reverse=True)
         if len(vocab_list) > self.max_vocab_size:
             vocab_list = vocab_list[:self.max_vocab_size]
-        vocab_path = os.path.join(self.data_path, "vocab.txt")
+        vocab_path = os.path.join(self.data_path, "vocab.pkl")
         with open(vocab_path, "wb") as vocab_file:
             pickle.dump(vocab_list, vocab_file)
 
+        vocab_path = os.path.join(self.data_path, "vocab.txt")
+        with open(vocab_path, "w") as vocab_file:
+            for w in vocab_list:
+                if w in self.vocab:
+                    vocab_file.write(w + " " + str(self.vocab[w]) + "\n")
+                else:
+                    vocab_file.write(w + "\n")
 
 class VocabMapper(object):
     def __init__(self, data_path, tokenizer = None):
@@ -56,7 +63,7 @@ class VocabMapper(object):
             self.tokenizer = util.tokenizer.basic_tokenizer
         else:
             self.tokenizer = tokenizer
-        vocab_path = os.path.join(data_path, "vocab.txt")
+        vocab_path = os.path.join(data_path, "vocab.pkl")
         rev_vocab = []
         with open(vocab_path, "rb") as f:
             rev_vocab = pickle.load(f)
