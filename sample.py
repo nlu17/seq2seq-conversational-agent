@@ -115,7 +115,7 @@ def loadModel(session, path):
 # 		print("Model not found...")
 # 		model = None
 
-    checkpoint_path = path + "/chatbotckpt-26200"
+    checkpoint_path = path + "/chatbot.ckpt-10000"
     print("Reading model parameters from {0}".format(checkpoint_path))
     model.saver.restore(session, checkpoint_path)
     return model
