@@ -30,8 +30,10 @@ def main():
          and os.path.exists(files[2]) and os.path.exists(files[3])):
         print("Train/Test files not detected, creating now...")
         data_processor = data_utils.DataProcessor(
-            max_vocab_size=40000,
-            tokenizer_str="basic")
+            max_vocab_size=10000,
+            tokenizer_str="basic",
+            max_source_length=80,
+            max_target_length=80)
         data_processor.run()
 
     source_lengths = []
