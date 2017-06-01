@@ -42,17 +42,15 @@ class ChatbotModel(object):
         if num_samples > self.vocab_size:
             num_samples = self.vocab_size - 1
         if num_samples > 0 and num_samples < self.vocab_size:
-            with tf.device("/cpu:0"):
-                w = tf.get_variable("proj_w", [hidden_size, self.vocab_size])
-                w_t = tf.transpose(w)
-                b = tf.get_variable("proj_b", [self.vocab_size])
+            w = tf.get_variable("proj_w", [hidden_size, self.vocab_size])
+            w_t = tf.transpose(w)
+            b = tf.get_variable("proj_b", [self.vocab_size])
             output_projection = (w, b)
 
         def sampled_loss(labels, inputs):
-            with tf.device("/cpu:0"):
-                labels = tf.reshape(labels, [-1, 1])
-                return tf.nn.sampled_softmax_loss(w_t, b, labels, inputs, num_samples,
-                                                  self.vocab_size)
+            labels = tf.reshape(labels, [-1, 1])
+            return tf.nn.sampled_softmax_loss(w_t, b, labels, inputs, num_samples,
+                                                self.vocab_size)
         softmax_loss_function = sampled_loss
 
         #e, hidden_size, initializer=tf.random_uniform_initializer(-1.0, 1.0)
