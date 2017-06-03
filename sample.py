@@ -22,7 +22,7 @@ max_target_length = 0
 
 flags = tf.app.flags
 FLAGS = flags.FLAGS
-flags.DEFINE_string('checkpoint_dir', 'data/checkpoints/1461979205hiddensize_100_dropout_0.5_numlayers_1', 'Directory to store/restore checkpoints')
+flags.DEFINE_string('checkpoint_dir', 'data/checkpoints/', 'Directory to store/restore checkpoints')
 flags.DEFINE_string('data_dir', "data/", "Data storage directory")
 flags.DEFINE_integer('static_temp', 60, 'number between 0 and 100. The lower the number the less likely static responses will come up')
 #flags.DEFINE_string('text', 'Hello World!', 'Text to sample with.')
@@ -34,9 +34,9 @@ flags.DEFINE_integer('static_temp', 60, 'number between 0 and 100. The lower the
 static_sources = []
 static_targets = []
 
-def main():
+def main(checkpoint_file):
 	with tf.Session() as sess:
-		model = loadModel(sess, FLAGS.checkpoint_dir)
+		model = loadModel(sess, FLAGS.checkpoint_dir, checkpoint_file)
 		print(_buckets)
 		model.batch_size = 1
 		vocab = vocab_utils.VocabMapper(FLAGS.data_dir)
@@ -89,7 +89,7 @@ def main():
 			conversation_history.append(sentence)
 			conversation_history = conversation_history[-1:]
 
-def loadModel(session, path):
+def loadModel(session, path, checkpoint_file):
     global _buckets
     global max_source_length
     global max_target_length
@@ -106,20 +106,11 @@ def loadModel(session, path):
         params["hidden_size"], 1.0, params["num_layers"], params["grad_clip"],
         1, params["learning_rate"], params["lr_decay_factor"], 512, True)
 
-#     ckpt = tf.train.get_checkpoint_state(path)
-# 	if ckpt and gfile.Exists(ckpt.model_checkpoint_path):
-# 		print("Reading model parameters from {0}".format(ckpt.model_checkpoint_path))
-# 		model.saver.restore(session, ckpt.model_checkpoint_path)
-# 	else:
-# 		print("Double check you got the checkpoint_dir right...")
-# 		print("Model not found...")
-# 		model = None
-
-    checkpoint_path = path + "/chatbot.ckpt-470000"
-    print("Reading model parameters from {0}".format(checkpoint_path))
-    model.saver.restore(session, checkpoint_path)
+    print("Reading model parameters from {0}".format(checkpoint_file))
+    model.saver.restore(session, checkpoint_file)
     return model
 
 
 if __name__=="__main__":
-	main()
+    checkpoint_file = sys.argv[1]
+    main(checkpoint_file)
