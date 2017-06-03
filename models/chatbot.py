@@ -85,7 +85,10 @@ class ChatbotModel(object):
         softmax_loss_function = sampled_loss
 
         def single_cell():
-            return tf.contrib.rnn.BasicLSTMCell(hidden_size)
+            return tf.contrib.rnn.DropoutWrapper( \
+                tf.contrib.rnn.BasicLSTMCell(hidden_size), \
+                input_keep_prob=self.dropout_keep_prob_lstm_input, \
+                output_keep_prob=self.dropout_keep_prob_lstm_output)
 
         cell = single_cell()
         if num_layers > 1:
