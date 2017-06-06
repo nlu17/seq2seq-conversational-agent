@@ -123,8 +123,8 @@ def readData(source_path, target_path):
     return data_set
 
 # TODO: change this to be deterministic, not random
-def get_batch(self, data, bucket_id):
-    encoder_size, decoder_size = self.buckets[bucket_id]
+def get_batch(data, bucket_id):
+    encoder_size, decoder_size = _buckets[bucket_id]
     encoder_inputs, decoder_inputs = [], []
 
     # Get a random batch of encoder and decoder inputs from data,
