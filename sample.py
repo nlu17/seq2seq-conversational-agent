@@ -18,7 +18,6 @@ from os.path import isfile, join
 _buckets = []
 max_source_length = 0
 max_target_length = 0
-#_buckets = [(10, 10), (50, 15), (100, 20), (200, 50)]
 
 flags = tf.app.flags
 FLAGS = flags.FLAGS
@@ -26,70 +25,55 @@ flags.DEFINE_string('checkpoint_dir', 'data/checkpoints/', 'Directory to store/r
 flags.DEFINE_string('data_dir', "data/", "Data storage directory")
 flags.DEFINE_string('with_attention', False, "If the model uses attention")
 flags.DEFINE_string('ckpt_file', '', "Checkpoint file")
-flags.DEFINE_integer('static_temp', 60, 'number between 0 and 100. The lower the number the less likely static responses will come up')
-#flags.DEFINE_string('text', 'Hello World!', 'Text to sample with.')
+flags.DEFINE_string('output_file', '', 'Name of the file wo write outputs to')
 
+BATCH_SIZE = 128
 
-#Read in static data to fuzzy matcher.
-#Assumes static_data has text files with discrete (source, target) pairs
-#Sources are on odd lines n_i, targets are on even lines n_{i+1}
-static_sources = []
-static_targets = []
+# TODO: make sure you write the outputs in order
 
 def main():
-	with tf.Session() as sess:
-		model = loadModel(sess, FLAGS.checkpoint_dir, FLAGS.ckpt_file)
-		print(_buckets)
-		model.batch_size = 1
-		vocab = vocab_utils.VocabMapper(FLAGS.data_dir)
-		sys.stdout.write(">")
-		sys.stdout.flush()
-		sentence = sys.stdin.readline().lower()
-		conversation_history = [sentence]
+    test_set = readData(source_test_file_path, target_test_file_path)
 
-		while sentence:
-			use_static_match = False
-			if len(static_sources) > 0:
-				#static_match = process.extractOne(sentence, static_sources)
-				#Check is static match is close enough to original input
-				best_ratio = 0
-				static_match = ""
-				for s in static_sources:
-					score = fuzz.partial_ratio(sentence, s)
-					if score > best_ratio:
-						static_match = s
-						best_ratio = score
-				if best_ratio > FLAGS.static_temp:
-					use_static_match = True
-					#Find corresponding target in static list, bypass neural net output
-					convo_output = static_targets[static_sources.index(static_match)]
+    with tf.Session() as sess, open(FLAGS.data_dir+FLAGS.output_file, "w") as fout:
+        model = loadModel(sess, FLAGS.checkpoint_dir, FLAGS.ckpt_file)
+        print(_buckets)
+        model.batch_size = 1
+        vocab = vocab_utils.VocabMapper(FLAGS.data_dir)
+        batch = sentences[BATCH_SIZE]
+        curr_idx = BATCH_SIZE
+        conversation_history = [sentence]
 
-			if not use_static_match:
-				token_ids = list(reversed(vocab.tokens2Indices(" ".join(conversation_history))))
-				bucket_id = min([b for b in xrange(len(_buckets))
-					if _buckets[b][0] > len(token_ids)])
+        while curr_idx < len(sentences):
+            token_ids = list(reversed(vocab.tokens2Indices(" ".join(conversation_history))))
+            eligible_bucket_ids = [b for b in xrange(len(_buckets))
+                    if _buckets[b][0] > len(token_ids)]
 
-				encoder_inputs, decoder_inputs, target_weights = model.get_batch(
-				{bucket_id: [(token_ids, [])]}, bucket_id)
+            if len(eligible_bucket_ids) > 0:
+                bucket_id = min(eligible_bucket_ids)
 
-				_, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
-					target_weights, bucket_id, True)
+                encoder_inputs, decoder_inputs, target_weights = model.get_batch(
+                {bucket_id: [(token_ids, [])]}, bucket_id)
 
-				#TODO implement beam search
-				outputs = [int(np.argmax(logit, axis=1)) for logit in output_logits]
+                _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
+                        target_weights, bucket_id, True)
 
-				if vocab_utils.EOS_ID in outputs:
-					outputs = outputs[:outputs.index(vocab_utils.EOS_ID)]
+                #TODO implement beam search
+                outputs = [int(np.argmax(logit, axis=1)) for logit in output_logits]
 
-				convo_output =  " ".join(vocab.indices2Tokens(outputs))
+                if vocab_utils.EOS_ID in outputs:
+                    outputs = outputs[:outputs.index(vocab_utils.EOS_ID)]
 
-			conversation_history.append(convo_output)
-			print(convo_output)
-			sys.stdout.write(">")
-			sys.stdout.flush()
-			sentence = sys.stdin.readline().lower()
-			conversation_history.append(sentence)
-			conversation_history = conversation_history[-1:]
+                convo_output =  " ".join(vocab.indices2Tokens(outputs))
+
+                conversation_history.append(convo_output)
+                fout.write(sentence + "\t" + convo_output + "\n")
+                fout.flush()
+
+            sentence = sentences[curr_idx]
+            curr_idx += 1
+            conversation_history.append(sentence)
+            conversation_history = conversation_history[-1:]
+
 
 def loadModel(session, path, checkpoint_file):
     global _buckets
@@ -113,6 +97,73 @@ def loadModel(session, path, checkpoint_file):
     model.saver.restore(session, checkpoint_file)
     return model
 
+
+def readData(source_path, target_path):
+    '''
+    This method directly from tensorflow translation example
+    '''
+    data_set = [[] for _ in _buckets]
+    with tf.gfile.GFile(source_path, mode="r") as source_file:
+        with tf.gfile.GFile(target_path, mode="r") as target_file:
+            source, target = source_file.readline(), target_file.readline()
+            counter = 0
+            while source and target:
+                counter += 1
+                if counter % 100000 == 0:
+                    print("  reading data line %d" % counter)
+                    sys.stdout.flush()
+                source_ids = [int(x) for x in source.split()]
+                target_ids = [int(x) for x in target.split()]
+                target_ids.append(vocab_utils.EOS_ID)
+                for bucket_id, (source_size, target_size) in enumerate(_buckets):
+                    if len(source_ids) < source_size and len(target_ids) < target_size:
+                        data_set[bucket_id].append([source_ids, target_ids])
+                        break
+                source, target = source_file.readline(), target_file.readline()
+    return data_set
+
+# TODO: change this to be deterministic, not random
+def get_batch(self, data, bucket_id):
+    encoder_size, decoder_size = self.buckets[bucket_id]
+    encoder_inputs, decoder_inputs = [], []
+
+    # Get a random batch of encoder and decoder inputs from data,
+    for _ in xrange(self.batch_size):
+        encoder_input, decoder_input = random.choice(data[bucket_id])
+
+        encoder_pad = [vocab_utils.PAD_ID] * (encoder_size - len(encoder_input))
+        encoder_inputs.append(encoder_input + encoder_pad)
+
+        decoder_pad_size = decoder_size - len(decoder_input) - 1
+        decoder_inputs.append([vocab_utils.GO_ID] + decoder_input +
+                              [vocab_utils.PAD_ID] * decoder_pad_size)
+
+    # Now we create batch-major vectors from the data selected above.
+    batch_encoder_inputs, batch_decoder_inputs, batch_weights = [], [], []
+
+    # Batch encoder inputs are just re-indexed encoder_inputs.
+    for length_idx in xrange(encoder_size):
+        batch_encoder_inputs.append(
+            np.array([encoder_inputs[batch_idx][length_idx]
+                      for batch_idx in xrange(self.batch_size)], dtype=np.int32))
+
+    # Batch decoder inputs are re-indexed decoder_inputs, we create weights.
+    for length_idx in xrange(decoder_size):
+        batch_decoder_inputs.append(
+            np.array([decoder_inputs[batch_idx][length_idx]
+                      for batch_idx in xrange(self.batch_size)], dtype=np.int32))
+
+        # Create target_weights to be 0 for targets that are padding.
+        batch_weight = np.ones(self.batch_size, dtype=np.float32)
+        for batch_idx in xrange(self.batch_size):
+            # We set weight to 0 if the corresponding target is a PAD symbol.
+            # The corresponding target is decoder_input shifted by 1 forward.
+            if length_idx < decoder_size - 1:
+                target = decoder_inputs[batch_idx][length_idx + 1]
+            if length_idx == decoder_size - 1 or target == vocab_utils.PAD_ID:
+                batch_weight[batch_idx] = 0.0
+        batch_weights.append(batch_weight)
+    return batch_encoder_inputs, batch_decoder_inputs, batch_weights
 
 if __name__=="__main__":
     main()

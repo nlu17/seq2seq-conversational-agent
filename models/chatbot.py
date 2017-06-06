@@ -93,11 +93,13 @@ class ChatbotModel(object):
         def seq2seq_f(encoder_inputs, decoder_inputs, do_decode, with_attention):
             s2s = None
             if with_attention:
+                print("PISAT")
                 s2s = tf.contrib.legacy_seq2seq.embedding_attention_seq2seq(
                     encoder_inputs, decoder_inputs, cell, num_encoder_symbols=vocab_size,
                     num_decoder_symbols=vocab_size, embedding_size=hidden_size,
                     output_projection=output_projection, feed_previous=do_decode)
             else:
+                print("CACAT")
                 s2s = tf.contrib.legacy_seq2seq.embedding_rnn_seq2seq(
                     encoder_inputs, decoder_inputs, cell, num_encoder_symbols=vocab_size,
                     num_decoder_symbols=vocab_size, embedding_size=hidden_size,

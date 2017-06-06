@@ -38,6 +38,7 @@ flags.DEFINE_string("extra_discrete_data", "", "directory to discrete conversati
 ##TODO add more than one tokenizer
 flags.DEFINE_string("tokenizer", "basic", "Choice of tokenizer, options are: basic (for now)")
 flags.DEFINE_string("checkpoint_dir", "data/checkpoints/", "Checkpoint dir")
+flags.DEFINE_string("ckpt_file", "", "Checkpoint file")
 flags.DEFINE_string("with_attention", True, "True if the model uses attention")
 flags.DEFINE_integer("max_train_data_size", 0,
                      "Limit on the size of training data (0: no limit).")
@@ -193,10 +194,9 @@ def createModel(session, path, vocab_size):
                     config.getint("max_data_sizes", "max_target_length")]
     hyper_params.saveHyperParameters(path, FLAGS, _buckets, convo_limits)
     print(path)
-    ckpt = tf.train.get_checkpoint_state(path)
-    if ckpt and gfile.Exists(ckpt.model_checkpoint_path):
-        print("Reading model parameters from {0}".format(ckpt.model_checkpoint_path))
-        model.saver.restore(session, ckpt.model_checkpoint_path)
+    if gfile.Exists(FLAGS.checkpoint_dir + FLAGS.ckpt_file + ".meta"):
+        print("Reading model parameters from {0}".format(FLAGS.checkpoint_dir+FLAGS.ckpt_file))
+        model.saver.restore(session, FLAGS.checkpoint_dir+FLAGS.ckpt_file)
     else:
         print("Created model with fresh parameters.")
         session.run(tf.initialize_all_variables())
