@@ -7,7 +7,7 @@ import random
 import numpy as np
 from six.moves import xrange
 import tensorflow as tf
-import seq2seq_enhancements as enhance
+import mmi_functions as mmi
 
 import util.vocabutils as vocab_utils
 
@@ -99,8 +99,8 @@ class ChatbotModel(object):
         def seq2seq_f(encoder_inputs, decoder_inputs, do_decode_with_mmi, with_attention):
             s2s = None
             if do_decode_with_mmi:
-                tf.contrib.legacy_seq2seq.embedding_rnn_decoder = enhance.get_embedding_mmi_rnn_decoder(self.vocab_prior)
-                tf.contrib.legacy_seq2seq.embedding_attention_decoder = enhance.get_embedding_mmi_attention_decoder(self.vocab_prior)
+                tf.contrib.legacy_seq2seq.embedding_rnn_decoder = mmi.get_embedding_mmi_rnn_decoder(self.vocab_prior)
+                tf.contrib.legacy_seq2seq.embedding_attention_decoder = mmi.get_embedding_mmi_attention_decoder(self.vocab_prior)
             if with_attention:
                 s2s = tf.contrib.legacy_seq2seq.embedding_attention_seq2seq(
                     encoder_inputs, decoder_inputs, cell, num_encoder_symbols=vocab_size,
