@@ -19,6 +19,7 @@ import util.vocabutils as vocab_utils
 from multiprocessing import Process
 
 DATA_DIR = "data/"
+MAX_NUM_LINES = 2  # The maximum number of lines for conversational history.
 
 
 class DataProcessor(object):
@@ -97,35 +98,44 @@ class DataProcessor(object):
 
     def parseTextFile(self, text_file, is_train):
         with open(text_file, "r+") as f:
-            lines = f.readlines()
-            for line in lines:
-                triple = line.strip().split("\t")
-                self.findSentencePairs(triple, is_train)
+            convos = f.readlines()
+            for convo in convos:
+                convo = convo.strip().split("\t")
+
+                line_buffer = []
+                for line in convo:
+                    if len(line_buffer) > MAX_NUM_LINES or \
+                            len(line_buffer) == len(convo):
+                        self.findSentencePairs(line_buffer, is_train)
+                        line_buffer.pop(0)
+                    line_buffer.append(line)
 
     def getRawFileList(self):
-        train = [os.path.join(DATA_DIR, "Training_Shuffled_Dataset.txt")]
+        train = [
+            os.path.join(DATA_DIR, "Training_Shuffled_Dataset.txt"),
+            os.path.join(DATA_DIR, "cornell_movie_dialogs_corpus/processed_conversations.txt")]
         test = [os.path.join(DATA_DIR, "Validation_Shuffled_Dataset.txt")]
         return train, test
 
-    def findSentencePairs(self, triple, is_train):
-        for i in range(1, len(triple)):
-            # TODO: maybe use first two utterances as source
-#             source_sentences = " ".join(triple[:i])
-            source_sentence = triple[i-1].strip()
-            target_sentence = triple[i].strip()
+    def findSentencePairs(self, convo, is_train):
+        for i in range(1, len(convo)):
+            # TODO: Use first two utterances as source
+            source_sentences = " ".join(convo[:i])
+#             source_sentence = convo[i-1].strip()
+            target_sentence = convo[i].strip()
             #Tokenize sentences
-            source_sentence = self.tokenizer(source_sentence)
+            source_sentences = self.tokenizer(source_sentences)
             target_sentence = self.tokenizer(target_sentence)
 
             #Convert tokens to id string, reverse source inputs
-            source_sentence = list(reversed(self.vocab_mapper.tokens2Indices(source_sentence)))
+            source_sentences = list(reversed(self.vocab_mapper.tokens2Indices(source_sentences)))
             target_sentence = self.vocab_mapper.tokens2Indices(target_sentence)
             #remove outliers (really long sentences) from data
-            if len(source_sentence) >= self.MAX_SOURCE_TOKEN_LENGTH or \
+            if len(source_sentences) >= self.MAX_SOURCE_TOKEN_LENGTH or \
                 len(target_sentence) >= self.MAX_TARGET_TOKEN_LENGTH:
-                print("skipped {0} and {1}".format(len(source_sentence), len(target_sentence)))
+                print("skipped {0} and {1}".format(len(source_sentences), len(target_sentence)))
                 continue
-            source_sentence = " ".join([str(x) for x in source_sentence])
+            source_sentences = " ".join([str(x) for x in source_sentences])
             target_sentence = " ".join([str(x) for x in target_sentence])
 
             data_source = self.train_source_file
@@ -135,6 +145,6 @@ class DataProcessor(object):
                 data_target = self.test_target_file
 
             with open(data_source, "a+") as f2:
-                f2.write(source_sentence + "\n")
+                f2.write(source_sentences + "\n")
             with open(data_target, "a+") as f2:
                 f2.write(target_sentence + "\n")

@@ -38,6 +38,7 @@ flags.DEFINE_string("extra_discrete_data", "", "directory to discrete conversati
 ##TODO add more than one tokenizer
 flags.DEFINE_string("tokenizer", "basic", "Choice of tokenizer, options are: basic (for now)")
 flags.DEFINE_string("checkpoint_dir", "data/checkpoints/", "Checkpoint dir")
+flags.DEFINE_string("with_attention", True, "True if the model uses attention")
 flags.DEFINE_integer("max_train_data_size", 0,
                      "Limit on the size of training data (0: no limit).")
 flags.DEFINE_integer("steps_per_checkpoint", 200,
@@ -179,7 +180,8 @@ def main():
 def createModel(session, path, vocab_size):
     model = models.chatbot.ChatbotModel(vocab_size, _buckets,
                                         FLAGS.hidden_size, FLAGS.dropout, FLAGS.num_layers, FLAGS.grad_clip,
-                                        FLAGS.batch_size, FLAGS.learning_rate, FLAGS.lr_decay_factor)
+                                        FLAGS.batch_size, FLAGS.learning_rate, FLAGS.lr_decay_factor,
+                                        FLAGS.with_attention)
     convo_limits = [config.getint("max_data_sizes", "max_source_length"),
                     config.getint("max_data_sizes", "max_target_length")]
     hyper_params.saveHyperParameters(path, FLAGS, _buckets, convo_limits)
