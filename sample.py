@@ -30,12 +30,6 @@ flags.DEFINE_integer('static_temp', 60, 'number between 0 and 100. The lower the
 #flags.DEFINE_string('text', 'Hello World!', 'Text to sample with.')
 
 
-#Read in static data to fuzzy matcher.
-#Assumes static_data has text files with discrete (source, target) pairs
-#Sources are on odd lines n_i, targets are on even lines n_{i+1}
-static_sources = []
-static_targets = []
-
 def main():
 	with tf.Session() as sess:
 		model = loadModel(sess, FLAGS.checkpoint_dir, FLAGS.ckpt_file)
@@ -48,40 +42,23 @@ def main():
 		conversation_history = [sentence]
 
 		while sentence:
-			use_static_match = False
-			if len(static_sources) > 0:
-				#static_match = process.extractOne(sentence, static_sources)
-				#Check is static match is close enough to original input
-				best_ratio = 0
-				static_match = ""
-				for s in static_sources:
-					score = fuzz.partial_ratio(sentence, s)
-					if score > best_ratio:
-						static_match = s
-						best_ratio = score
-				if best_ratio > FLAGS.static_temp:
-					use_static_match = True
-					#Find corresponding target in static list, bypass neural net output
-					convo_output = static_targets[static_sources.index(static_match)]
+                        token_ids = list(reversed(vocab.tokens2Indices(" ".join(conversation_history))))
+                        bucket_id = min([b for b in xrange(len(_buckets))
+                                if _buckets[b][0] > len(token_ids)])
 
-			if not use_static_match:
-				token_ids = list(reversed(vocab.tokens2Indices(" ".join(conversation_history))))
-				bucket_id = min([b for b in xrange(len(_buckets))
-					if _buckets[b][0] > len(token_ids)])
+                        encoder_inputs, decoder_inputs, target_weights = model.get_batch(
+                        {bucket_id: [(token_ids, [])]}, bucket_id)
 
-				encoder_inputs, decoder_inputs, target_weights = model.get_batch(
-				{bucket_id: [(token_ids, [])]}, bucket_id)
+                        _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
+                                target_weights, bucket_id, True)
 
-				_, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
-					target_weights, bucket_id, True)
+                        #TODO implement beam search
+                        outputs = [int(np.argmax(logit, axis=1)) for logit in output_logits]
 
-				#TODO implement beam search
-				outputs = [int(np.argmax(logit, axis=1)) for logit in output_logits]
+                        if vocab_utils.EOS_ID in outputs:
+                                outputs = outputs[:outputs.index(vocab_utils.EOS_ID)]
 
-				if vocab_utils.EOS_ID in outputs:
-					outputs = outputs[:outputs.index(vocab_utils.EOS_ID)]
-
-				convo_output =  " ".join(vocab.indices2Tokens(outputs))
+                        convo_output =  " ".join(vocab.indices2Tokens(outputs))
 
 			conversation_history.append(convo_output)
 			print(convo_output)
@@ -106,7 +83,7 @@ def loadModel(session, path, checkpoint_file):
         _buckets = buckets
     model = models.chatbot.ChatbotModel(params["vocab_size"], _buckets,
         params["hidden_size"], 1.0, params["num_layers"], params["grad_clip"],
-        1, params["learning_rate"], params["lr_decay_factor"], 512, True,
+        1, params["learning_rate"], params["lr_decay_factor"], num_samples=512, forward_only=True,
         with_attention=FLAGS.with_attention)
 
     print("Reading model parameters from {0}".format(checkpoint_file))

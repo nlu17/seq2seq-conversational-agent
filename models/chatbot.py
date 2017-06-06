@@ -7,6 +7,7 @@ import random
 import numpy as np
 from six.moves import xrange
 import tensorflow as tf
+import seq2seq_enhancements as enhance
 
 import util.vocabutils as vocab_utils
 
@@ -14,7 +15,7 @@ class ChatbotModel(object):
     def __init__(self, vocab_size, buckets, hidden_size, dropout,
                  num_layers, max_gradient_norm, batch_size, learning_rate,
                  lr_decay_factor, num_samples=512, forward_only=False,
-                 with_attention=False):
+                 with_attention=False, custom_decoder=False, vocab_prior=None):
         '''
         vocab_size: number of vocab tokens
         buckets: buckets of max sequence lengths
@@ -26,6 +27,9 @@ class ChatbotModel(object):
         lr_decay_factor: amount by which to decay learning rate
         num_samples: number of samples for sampled softmax
         forward_only: Whether to build backpass nodes or not
+        with_attention: attention model or not
+        custom_decoder: MMI Decoder or not
+        vocab_prior: useful for MMI Decoder
         '''
         self.vocab_size = vocab_size
         self.buckets = buckets
@@ -38,6 +42,8 @@ class ChatbotModel(object):
         self.dropout_keep_prob_lstm_input = tf.constant(self.dropout)
         self.dropout_keep_prob_lstm_output = tf.constant(self.dropout)
         self.with_attention = with_attention
+        self.custom_decoder = custom_decoder
+        self.vocab_prior = vocab_prior
 
         output_projection = None
         softmax_loss_function = None
@@ -90,18 +96,21 @@ class ChatbotModel(object):
         if num_layers > 1:
             cell = tf.contrib.rnn.MultiRNNCell([single_cell() for _ in range(num_layers)])
 
-        def seq2seq_f(encoder_inputs, decoder_inputs, do_decode, with_attention):
+        def seq2seq_f(encoder_inputs, decoder_inputs, do_decode_with_mmi, with_attention):
             s2s = None
+            if do_decode_with_mmi:
+                tf.contrib.legacy_seq2seq.embedding_rnn_decoder = enhance.get_embedding_mmi_rnn_decoder(self.vocab_prior)
+                tf.contrib.legacy_seq2seq.embedding_attention_decoder = enhance.get_embedding_mmi_attention_decoder(self.vocab_prior)
             if with_attention:
                 s2s = tf.contrib.legacy_seq2seq.embedding_attention_seq2seq(
                     encoder_inputs, decoder_inputs, cell, num_encoder_symbols=vocab_size,
                     num_decoder_symbols=vocab_size, embedding_size=hidden_size,
-                    output_projection=output_projection, feed_previous=do_decode)
+                    output_projection=output_projection, feed_previous=do_decode_with_mmi)
             else:
                 s2s = tf.contrib.legacy_seq2seq.embedding_rnn_seq2seq(
                     encoder_inputs, decoder_inputs, cell, num_encoder_symbols=vocab_size,
                     num_decoder_symbols=vocab_size, embedding_size=hidden_size,
-                    output_projection=output_projection, feed_previous=do_decode)
+                    output_projection=output_projection, feed_previous=do_decode_with_mmi)
 
             return s2s
 
