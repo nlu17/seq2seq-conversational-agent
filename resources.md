@@ -30,3 +30,4 @@ Code + tutorials
 Datasets
 ======
 [Cornell movie dataset] (https://www.cs.cornell.edu/~cristian/Cornell_Movie-Dialogs_Corpus.html)
+[Name dataset] (http://www.cs.cmu.edu/Groups/AI/util/areas/nlp/corpora/names/)
