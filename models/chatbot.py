@@ -14,7 +14,7 @@ class ChatbotModel(object):
     def __init__(self, vocab_size, buckets, hidden_size, dropout,
                  num_layers, max_gradient_norm, batch_size, learning_rate,
                  lr_decay_factor, num_samples=512, forward_only=False,
-                 with_attention):
+                 with_attention=False):
         '''
         vocab_size: number of vocab tokens
         buckets: buckets of max sequence lengths

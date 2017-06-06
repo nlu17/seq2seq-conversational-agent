@@ -35,7 +35,7 @@ class VocabBuilder(object):
         tokens = self.tokenizer(text)
         # TODO: see what normalize digits does.
         for w in tokens:
-            word = re.sub(_DIGIT_RE, b"0", w) if normalize_digits else w
+            word = re.sub(_DIGIT_RE, "0", w) if normalize_digits else w
             if word in self.vocab:
                 self.vocab[word] += 1
             else:

@@ -76,7 +76,6 @@ class DataProcessor(object):
             #create source and target token id files
             processes = []
             print("Creating token id data source and target train files...")
-
             p1 = Process(target=self.loopParseTextFiles, args=([train_text_files], True))
             p1.start()
             processes.append(p1)
@@ -92,7 +91,6 @@ class DataProcessor(object):
             print("Done data pre-processing...")
 
     def loopParseTextFiles(self, text_files, is_train):
-        # TODO: wtf?! why is it text_files[0] here?
         for text_file in text_files[0]:
             self.parseTextFile(text_file, is_train)
 
@@ -104,11 +102,11 @@ class DataProcessor(object):
 
                 line_buffer = []
                 for line in convo:
+                    line_buffer.append(line)
                     if len(line_buffer) > MAX_NUM_LINES or \
                             len(line_buffer) == len(convo):
                         self.findSentencePairs(line_buffer, is_train)
                         line_buffer.pop(0)
-                    line_buffer.append(line)
 
     def getRawFileList(self):
         train = [
@@ -120,8 +118,8 @@ class DataProcessor(object):
     def findSentencePairs(self, convo, is_train):
         for i in range(1, len(convo)):
             # TODO: Use first two utterances as source
-            source_sentences = " ".join(convo[:i])
-#             source_sentence = convo[i-1].strip()
+#             source_sentences = " ".join(convo[:i])
+            source_sentences = convo[i-1].strip()
             target_sentence = convo[i].strip()
             #Tokenize sentences
             source_sentences = self.tokenizer(source_sentences)

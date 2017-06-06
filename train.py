@@ -178,10 +178,17 @@ def main():
 
 
 def createModel(session, path, vocab_size):
-    model = models.chatbot.ChatbotModel(vocab_size, _buckets,
-                                        FLAGS.hidden_size, FLAGS.dropout, FLAGS.num_layers, FLAGS.grad_clip,
-                                        FLAGS.batch_size, FLAGS.learning_rate, FLAGS.lr_decay_factor,
-                                        FLAGS.with_attention)
+    model = models.chatbot.ChatbotModel(
+            vocab_size=vocab_size,
+            buckets=_buckets,
+            hidden_size=FLAGS.hidden_size,
+            dropout=FLAGS.dropout,
+            num_layers=FLAGS.num_layers,
+            max_gradient_norm=FLAGS.grad_clip,
+            batch_size=FLAGS.batch_size,
+            learning_rate=FLAGS.learning_rate,
+            lr_decay_factor=FLAGS.lr_decay_factor,
+            with_attention=FLAGS.with_attention)
     convo_limits = [config.getint("max_data_sizes", "max_source_length"),
                     config.getint("max_data_sizes", "max_target_length")]
     hyper_params.saveHyperParameters(path, FLAGS, _buckets, convo_limits)
