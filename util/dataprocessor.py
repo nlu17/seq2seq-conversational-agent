@@ -109,6 +109,7 @@ class DataProcessor(object):
                         line_buffer.pop(0)
 
     def getRawFileList(self):
+        # XXX: remove cornell from this list, for the baseline.
         train = [
             os.path.join(DATA_DIR, "Training_Shuffled_Dataset.txt"),
             os.path.join(DATA_DIR, "cornell_movie_dialogs_corpus/processed_conversations.txt")]
