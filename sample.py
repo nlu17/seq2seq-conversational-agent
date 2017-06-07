@@ -16,6 +16,7 @@ from os import listdir
 from os.path import isfile, join
 
 _buckets = []
+bucket_curr_idxs = [0, 0, 0, 0]
 max_source_length = 0
 max_target_length = 0
 
@@ -27,52 +28,74 @@ flags.DEFINE_string('with_attention', False, "If the model uses attention")
 flags.DEFINE_string('ckpt_file', '', "Checkpoint file")
 flags.DEFINE_string('output_file', '', 'Name of the file wo write outputs to')
 
-BATCH_SIZE = 128
+BATCH_SIZE = 256
 
 # TODO: make sure you write the outputs in order
 
 def main():
-    test_set = readData(source_test_file_path, target_test_file_path)
-
+    test_outputs = {}
     with tf.Session() as sess, open(FLAGS.data_dir+FLAGS.output_file, "w") as fout:
         model = loadModel(sess, FLAGS.checkpoint_dir, FLAGS.ckpt_file)
+
+        test_set = readData(
+                FLAGS.data_dir+"test_source.txt",
+                FLAGS.data_dir+"test_target.txt")
+
         print(_buckets)
-        model.batch_size = 1
+        model.batch_size = BATCH_SIZE
         vocab = vocab_utils.VocabMapper(FLAGS.data_dir)
-        batch = sentences[BATCH_SIZE]
-        curr_idx = BATCH_SIZE
-        conversation_history = [sentence]
 
-        while curr_idx < len(sentences):
-            token_ids = list(reversed(vocab.tokens2Indices(" ".join(conversation_history))))
-            eligible_bucket_ids = [b for b in xrange(len(_buckets))
-                    if _buckets[b][0] > len(token_ids)]
-
-            if len(eligible_bucket_ids) > 0:
-                bucket_id = min(eligible_bucket_ids)
-
-                encoder_inputs, decoder_inputs, target_weights = model.get_batch(
-                {bucket_id: [(token_ids, [])]}, bucket_id)
+        for bucket_id in range(len(_buckets)):
+            batch = get_batch(test_set, bucket_id)
+            while batch is not None:
+                curr_batch_size, encoder_inputs, decoder_inputs, target_weights, input_ids = batch
 
                 _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
                         target_weights, bucket_id, True)
 
                 #TODO implement beam search
-                outputs = [int(np.argmax(logit, axis=1)) for logit in output_logits]
+                outputs = [np.argmax(logit, axis=1).astype(int) for logit in output_logits]
 
-                if vocab_utils.EOS_ID in outputs:
-                    outputs = outputs[:outputs.index(vocab_utils.EOS_ID)]
+                probabilities = [softmax(logit) for logit in output_logits]
+                probabilities = [
+                        probabilities[i][xrange(BATCH_SIZE), outputs[i]]
+                        for i in xrange(len(outputs))]
 
-                convo_output =  " ".join(vocab.indices2Tokens(outputs))
+                outputs = np.array(outputs).transpose()
+                outputs = outputs[:curr_batch_size]
+                probabilities = np.array(probabilities).transpose()
+                probabilities = probabilities[:curr_batch_size]
 
-                conversation_history.append(convo_output)
-                fout.write(sentence + "\t" + convo_output + "\n")
-                fout.flush()
+                print(probabilities.tolist())
+                print(probabilities.shape)
 
-            sentence = sentences[curr_idx]
-            curr_idx += 1
-            conversation_history.append(sentence)
-            conversation_history = conversation_history[-1:]
+                # Get first occurence of EOS.
+                eos_idxs = np.argmax(outputs == vocab_utils.EOS_ID, axis=1)
+
+                mask = np.ones_like(probabilities)
+                for i, (out, eos, input_id) in enumerate(zip(outputs, eos_idxs, input_ids)):
+                    if out[eos] == vocab_utils.EOS_ID:
+                        out = out[:eos]
+                        mask[i][eos:] = 0
+                    convo_output =  " ".join(vocab.indices2Tokens(out))
+                    test_outputs[input_id] = convo_output
+
+                # TODO: Compute perplexities
+                log_probs = np.log2(probabilities) * mask
+#                 print(log_probs.tolist())
+                print(mask.sum(axis=1))
+                perplexities = 2 ** (-np.sum(log_probs, axis=1) /
+                        np.sum(mask, axis=1))
+                print(perplexities)
+                sys.exit(0)
+
+                print("Finished batch with shape", outputs.shape)
+                batch = get_batch(test_set, bucket_id)
+
+        # Write to file in order.
+        for input_id in xrange(len(test_outputs)):
+            fout.write(test_outputs[input_id]+ "\n")
+        fout.flush()
 
 
 def loadModel(session, path, checkpoint_file):
@@ -108,7 +131,6 @@ def readData(source_path, target_path):
             source, target = source_file.readline(), target_file.readline()
             counter = 0
             while source and target:
-                counter += 1
                 if counter % 100000 == 0:
                     print("  reading data line %d" % counter)
                     sys.stdout.flush()
@@ -117,19 +139,35 @@ def readData(source_path, target_path):
                 target_ids.append(vocab_utils.EOS_ID)
                 for bucket_id, (source_size, target_size) in enumerate(_buckets):
                     if len(source_ids) < source_size and len(target_ids) < target_size:
-                        data_set[bucket_id].append([source_ids, target_ids])
+                        data_set[bucket_id].append([source_ids, target_ids, counter])
                         break
+                else:
+                    last_id = len(_buckets) - 1
+                    source_size, target_size = _buckets[last_id]
+                    source_ids = source_ids[:source_size]
+                    target_ids = target_ids[:target_size]
+                    data_set[last_id].append([source_ids, target_ids, counter])
                 source, target = source_file.readline(), target_file.readline()
+                counter += 1
+    print(len(data_set[0]), len(data_set[1]), len(data_set[2]),
+            len(data_set[3]))
     return data_set
 
-# TODO: change this to be deterministic, not random
 def get_batch(data, bucket_id):
     encoder_size, decoder_size = _buckets[bucket_id]
-    encoder_inputs, decoder_inputs = [], []
+    encoder_inputs, decoder_inputs, input_ids = [], [], []
 
-    # Get a random batch of encoder and decoder inputs from data,
-    for _ in xrange(self.batch_size):
-        encoder_input, decoder_input = random.choice(data[bucket_id])
+#     print("CURR IDXS", bucket_curr_idxs)
+
+    curr_size = 0
+    for _ in xrange(BATCH_SIZE):
+        idx = bucket_curr_idxs[bucket_id]
+
+        if idx >= len(data[bucket_id]):
+            break
+
+        bucket_curr_idxs[bucket_id] += 1
+        encoder_input, decoder_input, input_id = data[bucket_id][idx]
 
         encoder_pad = [vocab_utils.PAD_ID] * (encoder_size - len(encoder_input))
         encoder_inputs.append(encoder_input + encoder_pad)
@@ -138,6 +176,17 @@ def get_batch(data, bucket_id):
         decoder_inputs.append([vocab_utils.GO_ID] + decoder_input +
                               [vocab_utils.PAD_ID] * decoder_pad_size)
 
+        input_ids.append(input_id)
+        curr_size += 1
+
+    if encoder_inputs == []:
+        return None
+
+    # Add dummy entries to complete the batch.
+    for _ in xrange(BATCH_SIZE - curr_size):
+        encoder_inputs.append([vocab_utils.PAD_ID] * encoder_size)
+        decoder_inputs.append([vocab_utils.PAD_ID] * decoder_size)
+
     # Now we create batch-major vectors from the data selected above.
     batch_encoder_inputs, batch_decoder_inputs, batch_weights = [], [], []
 
@@ -145,17 +194,17 @@ def get_batch(data, bucket_id):
     for length_idx in xrange(encoder_size):
         batch_encoder_inputs.append(
             np.array([encoder_inputs[batch_idx][length_idx]
-                      for batch_idx in xrange(self.batch_size)], dtype=np.int32))
+                      for batch_idx in xrange(BATCH_SIZE)], dtype=np.int32))
 
     # Batch decoder inputs are re-indexed decoder_inputs, we create weights.
     for length_idx in xrange(decoder_size):
         batch_decoder_inputs.append(
             np.array([decoder_inputs[batch_idx][length_idx]
-                      for batch_idx in xrange(self.batch_size)], dtype=np.int32))
+                      for batch_idx in xrange(BATCH_SIZE)], dtype=np.int32))
 
         # Create target_weights to be 0 for targets that are padding.
-        batch_weight = np.ones(self.batch_size, dtype=np.float32)
-        for batch_idx in xrange(self.batch_size):
+        batch_weight = np.ones(BATCH_SIZE, dtype=np.float32)
+        for batch_idx in xrange(BATCH_SIZE):
             # We set weight to 0 if the corresponding target is a PAD symbol.
             # The corresponding target is decoder_input shifted by 1 forward.
             if length_idx < decoder_size - 1:
@@ -163,7 +212,12 @@ def get_batch(data, bucket_id):
             if length_idx == decoder_size - 1 or target == vocab_utils.PAD_ID:
                 batch_weight[batch_idx] = 0.0
         batch_weights.append(batch_weight)
-    return batch_encoder_inputs, batch_decoder_inputs, batch_weights
+    return curr_size, batch_encoder_inputs, batch_decoder_inputs, batch_weights, input_ids
+
+def softmax(x):
+    """Compute softmax values for each sets of scores in x."""
+    e_x = np.exp(x - np.max(x, axis=1).reshape((-1,1)))
+    return e_x / e_x.sum(axis=1).reshape((-1,1))
 
 if __name__=="__main__":
     main()
