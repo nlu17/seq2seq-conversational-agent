@@ -2,7 +2,7 @@
 Code in this file is for sampling use of chatbot
 '''
 
-
+from collections import Counter
 import tensorflow as tf
 from tensorflow.python.platform import gfile
 import numpy as np
@@ -34,7 +34,7 @@ BATCH_SIZE = 256
 
 def main():
     test_outputs = {}
-    with tf.Session() as sess, open(FLAGS.data_dir+FLAGS.output_file, "w") as fout:
+    with tf.Session() as sess:
         model = loadModel(sess, FLAGS.checkpoint_dir, FLAGS.ckpt_file)
 
         test_set = readData(
@@ -66,11 +66,10 @@ def main():
                 probabilities = np.array(probabilities).transpose()
                 probabilities = probabilities[:curr_batch_size]
 
-                print(probabilities.tolist())
-                print(probabilities.shape)
-
                 # Get first occurence of EOS.
                 eos_idxs = np.argmax(outputs == vocab_utils.EOS_ID, axis=1)
+
+                decoder_inputs = np.array(decoder_inputs).transpose()
 
                 mask = np.ones_like(probabilities)
                 for i, (out, eos, input_id) in enumerate(zip(outputs, eos_idxs, input_ids)):
@@ -78,23 +77,31 @@ def main():
                         out = out[:eos]
                         mask[i][eos:] = 0
                     convo_output =  " ".join(vocab.indices2Tokens(out))
-                    test_outputs[input_id] = convo_output
+
+                    # Compute BLEU score.
+                    intersection = Counter(out) & Counter(decoder_inputs[i])
+                    bleu = sum(intersection.values()) / decoder_inputs.shape[1]
+
+                    test_outputs[input_id] = [convo_output, bleu]
 
                 # TODO: Compute perplexities
                 log_probs = np.log2(probabilities) * mask
-#                 print(log_probs.tolist())
-                print(mask.sum(axis=1))
                 perplexities = 2 ** (-np.sum(log_probs, axis=1) /
                         np.sum(mask, axis=1))
-                print(perplexities)
-                sys.exit(0)
+
+                for perp, input_id in zip(perplexities, input_ids):
+                    test_outputs[input_id].append(perp)
 
                 print("Finished batch with shape", outputs.shape)
                 batch = get_batch(test_set, bucket_id)
 
+    print("CACAT", test_outputs[0][0], test_outputs[0][1], test_outputs[0][2])
+    with open(FLAGS.data_dir+FLAGS.output_file, "w") as fout:
         # Write to file in order.
         for input_id in xrange(len(test_outputs)):
-            fout.write(test_outputs[input_id]+ "\n")
+            fout.write(test_outputs[input_id][0] + " " +
+                    str(test_outputs[input_id][1]) + " " +
+                    str(test_outputs[input_id][2]) + "\n")
         fout.flush()
 
 
@@ -149,8 +156,7 @@ def readData(source_path, target_path):
                     data_set[last_id].append([source_ids, target_ids, counter])
                 source, target = source_file.readline(), target_file.readline()
                 counter += 1
-    print(len(data_set[0]), len(data_set[1]), len(data_set[2]),
-            len(data_set[3]))
+    print(len(data_set[0]), len(data_set[1]), len(data_set[2]), len(data_set[3]))
     return data_set
 
 def get_batch(data, bucket_id):
