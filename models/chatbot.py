@@ -7,6 +7,8 @@ import random
 import numpy as np
 from six.moves import xrange
 import tensorflow as tf
+#import tf.contrib.legacy_seq2seq as seq2seq
+import mmi_seq2seq as seq2seq
 import mmi_functions as mmi
 
 import util.vocabutils as vocab_utils
@@ -98,16 +100,13 @@ class ChatbotModel(object):
 
         def seq2seq_f(encoder_inputs, decoder_inputs, do_decode_with_mmi, with_attention):
             s2s = None
-            if do_decode_with_mmi:
-                tf.contrib.legacy_seq2seq.embedding_rnn_decoder = mmi.get_embedding_mmi_rnn_decoder(self.vocab_prior)
-                tf.contrib.legacy_seq2seq.embedding_attention_decoder = mmi.get_embedding_mmi_attention_decoder(self.vocab_prior)
             if with_attention:
-                s2s = tf.contrib.legacy_seq2seq.embedding_attention_seq2seq(
+                s2s = seq2seq.embedding_attention_seq2seq(
                     encoder_inputs, decoder_inputs, cell, num_encoder_symbols=vocab_size,
                     num_decoder_symbols=vocab_size, embedding_size=hidden_size,
                     output_projection=output_projection, feed_previous=do_decode_with_mmi)
             else:
-                s2s = tf.contrib.legacy_seq2seq.embedding_rnn_seq2seq(
+                s2s = seq2seq.embedding_rnn_seq2seq(
                     encoder_inputs, decoder_inputs, cell, num_encoder_symbols=vocab_size,
                     num_decoder_symbols=vocab_size, embedding_size=hidden_size,
                     output_projection=output_projection, feed_previous=do_decode_with_mmi)
@@ -132,7 +131,7 @@ class ChatbotModel(object):
                    for i in xrange(len(self.decoder_inputs) - 1)]
 
         if forward_only:
-            self.outputs, self.losses = tf.contrib.legacy_seq2seq.model_with_buckets(
+            self.outputs, self.losses = seq2seq.model_with_buckets(
                 self.encoder_inputs, self.decoder_inputs, targets,
                 self.target_weights, buckets, lambda x, y: seq2seq_f(x, y, True, self.with_attention),
                 softmax_loss_function=softmax_loss_function)
@@ -143,7 +142,7 @@ class ChatbotModel(object):
                         for output in self.outputs[b]
                     ]
         else:
-            self.outputs, self.losses = tf.contrib.legacy_seq2seq.model_with_buckets(
+            self.outputs, self.losses = seq2seq.model_with_buckets(
                 self.encoder_inputs, self.decoder_inputs, targets,
                 self.target_weights, buckets,
                 lambda x, y: seq2seq_f(x, y, False, self.with_attention),
