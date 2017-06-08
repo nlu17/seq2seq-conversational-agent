@@ -58,8 +58,10 @@ def main():
 
                 probabilities = [softmax(logit) for logit in output_logits]
                 probabilities = [
-                        probabilities[i][xrange(BATCH_SIZE), outputs[i]]
-                        for i in xrange(len(outputs))]
+                        probabilities[i][xrange(BATCH_SIZE), decoder_inputs[i]]
+                        for i in xrange(len(decoder_inputs))]
+
+                decoder_inputs = np.array(decoder_inputs).transpose()
 
                 outputs = np.array(outputs).transpose()
                 outputs = outputs[:curr_batch_size]
@@ -68,19 +70,21 @@ def main():
 
                 # Get first occurence of EOS.
                 eos_idxs = np.argmax(outputs == vocab_utils.EOS_ID, axis=1)
-
-                decoder_inputs = np.array(decoder_inputs).transpose()
+                ref_eos_idxs = np.argmax(decoder_inputs == vocab_utils.EOS_ID, axis=1)
 
                 mask = np.ones_like(probabilities)
-                for i, (out, eos, input_id) in enumerate(zip(outputs, eos_idxs, input_ids)):
+                mask[:,0] = 0 # ignore prob of GO symbol
+                for i, (out, eos, ref_eos, input_id) in enumerate(
+                        zip(outputs, eos_idxs, ref_eos_idxs, input_ids)):
                     if out[eos] == vocab_utils.EOS_ID:
                         out = out[:eos]
-                        mask[i][eos:] = 0
+                    if decoder_inputs[i][ref_eos] == vocab_utils.EOS_ID:
+                        mask[i][ref_eos:] = 0
                     convo_output =  " ".join(vocab.indices2Tokens(out))
 
                     # Compute BLEU score.
                     intersection = Counter(out) & Counter(decoder_inputs[i])
-                    bleu = sum(intersection.values()) / decoder_inputs.shape[1]
+                    bleu = (1 + sum(intersection.values())) / (decoder_inputs.shape[1] - 1)
 
                     test_outputs[input_id] = [convo_output, bleu]
 
