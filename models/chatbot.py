@@ -7,8 +7,6 @@ import random
 import numpy as np
 from six.moves import xrange
 import tensorflow as tf
-#import tf.contrib.legacy_seq2seq as seq2seq
-import mmi_seq2seq as seq2seq
 import mmi_functions as mmi
 
 import util.vocabutils as vocab_utils
@@ -17,7 +15,7 @@ class ChatbotModel(object):
     def __init__(self, vocab_size, buckets, hidden_size, dropout,
                  num_layers, max_gradient_norm, batch_size, learning_rate,
                  lr_decay_factor, num_samples=512, forward_only=False,
-                 with_attention=False, custom_decoder=False, vocab_prior=None):
+                 with_attention=False, custom_decoder="default", vocab_prior=None):
         '''
         vocab_size: number of vocab tokens
         buckets: buckets of max sequence lengths
@@ -30,7 +28,7 @@ class ChatbotModel(object):
         num_samples: number of samples for sampled softmax
         forward_only: Whether to build backpass nodes or not
         with_attention: attention model or not
-        custom_decoder: MMI Decoder or not
+        custom_decoder: type of decoder
         vocab_prior: useful for MMI Decoder
         '''
         self.vocab_size = vocab_size
@@ -45,7 +43,18 @@ class ChatbotModel(object):
         self.dropout_keep_prob_lstm_output = tf.constant(self.dropout)
         self.with_attention = with_attention
         self.custom_decoder = custom_decoder
-        self.vocab_prior = vocab_prior
+        
+        if custom_decoder == "default":
+            import tf.contrib.legacy_seq2seq as seq2seq
+        elif custom_decoder == "mmi":
+            import mmi_seq2seq as seq2seq
+            seq2seq.log_prior = vocab_prior
+        elif custom_decoder == "beam":
+            import beam_seq2seq as seq2seq
+        else:
+            raise NotImplementedError
+
+
 
         output_projection = None
         softmax_loss_function = None

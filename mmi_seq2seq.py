@@ -76,6 +76,9 @@ from tensorflow.python.util import nest
 # TODO(ebrevdo): Remove once _linear is fully deprecated.
 linear = core_rnn_cell_impl._linear  # pylint: disable=protected-access
 
+log_prior = None
+GAMMA = 3    # word limit for anti language penalty
+LAMBDA = 0.5  # weight of anti-language compare to p(T|S)
 
 def _extract_argmax_and_embed(embedding,
                               output_projection=None,
@@ -94,7 +97,6 @@ def _extract_argmax_and_embed(embedding,
   """
 
   def loop_function(prev, _):
-    print("blah")
     if output_projection is not None:
       prev = nn_ops.xw_plus_b(prev, output_projection[0], output_projection[1])
     prev_symbol = math_ops.argmax(prev, 1)
@@ -107,6 +109,39 @@ def _extract_argmax_and_embed(embedding,
 
   return loop_function
 
+def _extract_mmiargmax_and_embed(embedding,
+                              output_projection=None,
+                              update_embedding=True):
+  """Get a loop_function that extracts the previous symbol and embeds it.
+  Args:
+    embedding: embedding tensor for symbols.
+    output_projection: None or a pair (W, B). If provided, each fed previous
+      output will first be multiplied by W and added B.
+    update_embedding: Boolean; if False, the gradients will not propagate
+      through the embeddings.
+  Returns:
+    A loop function.
+  """
+
+  def loop_function(prev, i):
+    if output_projection is not None:
+      prev = nn_ops.xw_plus_b(prev, output_projection[0], output_projection[1])
+
+    if i < GAMMA:
+      log_probts = tf.nn.log_softmax(prev)      # p(T|S)
+      log_probts_sub = tf.subtract(log_probts, tf.scalar_mul(LAMBDA, log_prior))   # p(T|S) - λ.p(T)
+      prev_symbol = math_ops.argmax(log_probts_sub, 1)
+    else:
+      prev_symbol = math_ops.argmax(prev, 1)
+
+    # Note that gradients will not propagate through the second parameter of
+    # embedding_lookup.
+    emb_prev = embedding_ops.embedding_lookup(embedding, prev_symbol)
+    if not update_embedding:
+      emb_prev = array_ops.stop_gradient(emb_prev)
+    return emb_prev
+
+  return loop_function
 
 def rnn_decoder(decoder_inputs,
                 initial_state,
@@ -287,7 +322,7 @@ def embedding_rnn_decoder(decoder_inputs,
 
     embedding = variable_scope.get_variable("embedding",
                                             [num_symbols, embedding_size])
-    loop_function = _extract_argmax_and_embed(
+    loop_function = _extract_mmiargmax_and_embed(
         embedding, output_projection,
         update_embedding_for_previous) if feed_previous else None
     emb_inp = (embedding_ops.embedding_lookup(embedding, i)
@@ -766,7 +801,7 @@ def embedding_attention_decoder(decoder_inputs,
 
     embedding = variable_scope.get_variable("embedding",
                                             [num_symbols, embedding_size])
-    loop_function = _extract_argmax_and_embed(
+    loop_function = _extract_mmiargmax_and_embed(
         embedding, output_projection,
         update_embedding_for_previous) if feed_previous else None
     emb_inp = [
