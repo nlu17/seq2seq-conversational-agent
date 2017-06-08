@@ -27,6 +27,8 @@ translation, or even constructing automated replies to emails.
     (see the tutorial above for an explanation of why and how to use it).
 """
 
+import copy
+
 from six.moves import xrange  # pylint: disable=redefined-builtin
 from six.moves import zip     # pylint: disable=redefined-builtin
 
@@ -39,11 +41,12 @@ from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn_ops
 from tensorflow.contrib.rnn.python.ops import core_rnn as rnn
 from tensorflow.contrib.rnn.python.ops import core_rnn_cell as rnn_cell
-from tensorflow.contrib.rnn.python.ops import core_rnn_cell_impl 
+from tensorflow.contrib.rnn.python.ops import core_rnn_cell_impl
 from tensorflow.python.ops import variable_scope
+from tensorflow.python.util import nest
 import tensorflow as tf
 
-linear = core_rnn_cell_impl._linear 
+linear = core_rnn_cell_impl._linear
 
 def _extract_argmax_and_embed(embedding, output_projection=None,
                               update_embedding=True):
@@ -279,9 +282,8 @@ def embedding_rnn_decoder(decoder_inputs, initial_state, cell, num_symbols,
     proj_biases.get_shape().assert_is_compatible_with([num_symbols])
 
   with variable_scope.variable_scope(scope or "embedding_rnn_decoder"):
-    with ops.device("/cpu:0"):
-      embedding = variable_scope.get_variable("embedding",
-                                              [num_symbols, embedding_size])
+    embedding = variable_scope.get_variable("embedding",
+                                          [num_symbols, embedding_size])
 
     if beam_search:
         loop_function = _extract_beam_search(
@@ -608,6 +610,14 @@ def beam_attention_decoder(decoder_inputs, initial_state, attention_states, cell
     def attention(query):
       """Put attention masks on hidden using hidden_features and query."""
       ds = []  # Results of attention reads will be stored here.
+      if nest.is_sequence(query):  # If the query is a tuple, flatten it.
+        query_list = nest.flatten(query)
+        for q in query_list:  # Check that ndims == 2 if specified.
+          ndims = q.get_shape().ndims
+          if ndims:
+            assert ndims == 2
+        query = array_ops.concat(query_list, 1)
+      print("INIT", len(state), attention_vec_size, query.shape)
       for a in xrange(num_heads):
         with variable_scope.variable_scope("Attention_%d" % a):
           y = linear(query, attention_vec_size, True)
@@ -616,28 +626,30 @@ def beam_attention_decoder(decoder_inputs, initial_state, attention_states, cell
           s = math_ops.reduce_sum(
               v[a] * math_ops.tanh(hidden_features[a] + y), [2, 3])
           a = nn_ops.softmax(s)
+          print("PENIS", a.shape)
           # Now calculate the attention-weighted vector d.
           d = math_ops.reduce_sum(
               array_ops.reshape(a, [-1, attn_length, 1, 1]) * hidden,
               [1, 2])
-          # for c in range(ct):
+          print("PENIS", d.shape)
           ds.append(array_ops.reshape(d, [-1, attn_size]))
       return ds
 
     outputs = []
     prev = None
-    batch_attn_size = array_ops.pack([batch_size, attn_size])
+    batch_attn_size = array_ops.stack([batch_size, attn_size])
     attns = [array_ops.zeros(batch_attn_size, dtype=dtype)
              for _ in xrange(num_heads)]
     for a in attns:  # Ensure the second shape of attention vectors is set.
       a.set_shape([None, attn_size])
 
-    if initial_state_attention:
-       attns = []
-       attns.append(attention(initial_state))
-       tmp = tf.reshape(tf.concat(attns, 0), [-1, attn_size])
-       attns = []
-       attns.append(tmp)
+#     if initial_state_attention:
+#         attns = attention(initial_state)
+#        attns = []
+#        attns.append(attention(initial_state))
+#        tmp = tf.reshape(tf.concat(attns, 0), [-1, attn_size])
+#        attns = []
+#        attns.append(tmp)
 
     log_beam_probs, beam_path, beam_symbols = [],[],[]
     for i, inp in enumerate(decoder_inputs):
@@ -651,6 +663,10 @@ def beam_attention_decoder(decoder_inputs, initial_state, attention_states, cell
                 inp = loop_function(prev, i,log_beam_probs, beam_path, beam_symbols)
 
       input_size = inp.get_shape().with_rank(2)[1]
+      new_attns = []
+      for a in attns:
+          new_attns.append(tf.reshape(a, [-1, attn_size], name="motherfucker"))
+      attns = new_attns
       x = linear([inp] + attns, input_size, True)
       cell_output, state = cell(x, state)
 
@@ -666,14 +682,17 @@ def beam_attention_decoder(decoder_inputs, initial_state, attention_states, cell
         output = linear([cell_output] + attns, output_size, True)
       if loop_function is not None:
         prev = output
-      if  i ==0:
-          cstates, hstates = [], []
-          for kk in range(beam_size):
-                cstates.append(state[0])
-                hstates.append(state[1])
-          cstate = tf.concat(cstates, 0)
-          hstate = tf.concat(hstates, 0)
-          state = (cstate, hstate)
+      if  i == 0:
+          states = [[[], []]] * 4
+          for layer in range(4):
+              for kk in range(beam_size):
+                  states[layer][0].append(state[layer][0])
+                  states[layer][1].append(state[layer][1])
+          for layer in range(4):
+              states[layer][0] = tf.concat(states[layer][0], 0)
+              states[layer][1] = tf.concat(states[layer][1], 0)
+              states[layer] = tuple(states[layer])
+          state = tuple(states)
           with variable_scope.variable_scope(variable_scope.get_variable_scope(), reuse=True):
                 attns = attention(state)
 
@@ -820,7 +839,7 @@ def embedding_attention_seq2seq(encoder_inputs, decoder_inputs, cell,
     encoder_cell = rnn_cell.EmbeddingWrapper(
         cell, embedding_classes=num_encoder_symbols,
         embedding_size=embedding_size)
-    encoder_outputs, encoder_state = rnn.rnn(
+    encoder_outputs, encoder_state = rnn.static_rnn(
         encoder_cell, encoder_inputs, dtype=dtype)
     #print "Symbols"
     #print num_encoder_symbols
@@ -829,7 +848,7 @@ def embedding_attention_seq2seq(encoder_inputs, decoder_inputs, cell,
     top_states = [array_ops.reshape(e, [-1, 1, cell.output_size])
                   for e in encoder_outputs]
     attention_states = array_ops.concat(top_states, 1)
-    #print attention_states
+    print("ATTENTION STATES", attention_states)
     # Decoder.
     output_size = None
     if output_projection is None:
