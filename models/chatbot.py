@@ -14,7 +14,7 @@ class ChatbotModel(object):
     def __init__(self, vocab_size, buckets, hidden_size, dropout,
                  num_layers, max_gradient_norm, batch_size, learning_rate,
                  lr_decay_factor, num_samples=512, forward_only=False,
-                 with_attention=False):
+                 with_attention=False, custom_decoder="default", vocab_prior=None):
         '''
         vocab_size: number of vocab tokens
         buckets: buckets of max sequence lengths
@@ -26,6 +26,9 @@ class ChatbotModel(object):
         lr_decay_factor: amount by which to decay learning rate
         num_samples: number of samples for sampled softmax
         forward_only: Whether to build backpass nodes or not
+        with_attention: attention model or not
+        custom_decoder: type of decoder
+        vocab_prior: useful for MMI Decoder
         '''
         self.vocab_size = vocab_size
         self.buckets = buckets
@@ -38,6 +41,19 @@ class ChatbotModel(object):
         self.dropout_keep_prob_lstm_input = tf.constant(self.dropout)
         self.dropout_keep_prob_lstm_output = tf.constant(self.dropout)
         self.with_attention = with_attention
+        self.custom_decoder = custom_decoder
+
+        if custom_decoder == "default":
+            import tf.contrib.legacy_seq2seq as seq2seq
+        elif custom_decoder == "mmi":
+            import mmi_seq2seq as seq2seq
+            seq2seq.log_prior = vocab_prior
+        elif custom_decoder == "beam":
+            import beam_seq2seq as seq2seq
+        else:
+            raise NotImplementedError
+
+
 
         output_projection = None
         softmax_loss_function = None
@@ -90,18 +106,18 @@ class ChatbotModel(object):
         if num_layers > 1:
             cell = tf.contrib.rnn.MultiRNNCell([single_cell() for _ in range(num_layers)])
 
-        def seq2seq_f(encoder_inputs, decoder_inputs, do_decode, with_attention):
+        def seq2seq_f(encoder_inputs, decoder_inputs, do_decode_with_mmi, with_attention):
             s2s = None
             if with_attention:
-                s2s = tf.contrib.legacy_seq2seq.embedding_attention_seq2seq(
+                s2s = seq2seq.embedding_attention_seq2seq(
                     encoder_inputs, decoder_inputs, cell, num_encoder_symbols=vocab_size,
                     num_decoder_symbols=vocab_size, embedding_size=hidden_size,
-                    output_projection=output_projection, feed_previous=do_decode)
+                    output_projection=output_projection, feed_previous=do_decode_with_mmi)
             else:
-                s2s = tf.contrib.legacy_seq2seq.embedding_rnn_seq2seq(
+                s2s = seq2seq.embedding_rnn_seq2seq(
                     encoder_inputs, decoder_inputs, cell, num_encoder_symbols=vocab_size,
                     num_decoder_symbols=vocab_size, embedding_size=hidden_size,
-                    output_projection=output_projection, feed_previous=do_decode)
+                    output_projection=output_projection, feed_previous=do_decode_with_mmi)
 
             return s2s
 
@@ -123,7 +139,7 @@ class ChatbotModel(object):
                    for i in xrange(len(self.decoder_inputs) - 1)]
 
         if forward_only:
-            self.outputs, self.losses = tf.contrib.legacy_seq2seq.model_with_buckets(
+            self.outputs, self.losses = seq2seq.model_with_buckets(
                 self.encoder_inputs, self.decoder_inputs, targets,
                 self.target_weights, buckets, lambda x, y: seq2seq_f(x, y, True, self.with_attention),
                 softmax_loss_function=softmax_loss_function)
@@ -134,7 +150,7 @@ class ChatbotModel(object):
                         for output in self.outputs[b]
                     ]
         else:
-            self.outputs, self.losses = tf.contrib.legacy_seq2seq.model_with_buckets(
+            self.outputs, self.losses = seq2seq.model_with_buckets(
                 self.encoder_inputs, self.decoder_inputs, targets,
                 self.target_weights, buckets,
                 lambda x, y: seq2seq_f(x, y, False, self.with_attention),

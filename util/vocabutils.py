@@ -2,6 +2,7 @@ import pickle
 import util.tokenizer
 import re
 import os
+import tensorflow as tf
 
 _PAD = "_PAD"
 _GO = "_GO"
@@ -70,6 +71,29 @@ class VocabMapper(object):
         vocab = dict([(x, y) for (y, x) in enumerate(rev_vocab)])
         self.vocab = vocab
         self.rev_vocab = rev_vocab
+
+        count_path = os.path.join(data_path, "vocab.txt")
+        lines = open(count_path, "r").readlines()
+        counts = [0.] * len(rev_vocab)
+        for i, line in enumerate(lines):
+            s = line.strip().split(" ")
+            if s[0] !=  rev_vocab[i]:
+              print(s[0], "blah", rev_vocab[i])
+            assert s[0] == rev_vocab[i], "Vocabulary order different??"
+            if len(s) == 2:
+                counts[i] = float(s[1])
+        maxcnt = max(counts)
+        for special in _START_VOCAB:
+            i = self.vocab[special]
+            assert counts[i] == 0, "Count of special non zero"
+            counts[i] = maxcnt
+        tf_counts = tf.convert_to_tensor(counts, dtype=tf.float32)
+        tot_count = tf.reduce_sum(tf_counts)
+        prior = tf.div(tf_counts, tot_count)
+        self.log_prior =  tf.log(prior)
+
+    def getLogPrior(self, data_path=None):
+        return self.log_prior
 
     def getVocabSize(self):
         return len(self.rev_vocab)

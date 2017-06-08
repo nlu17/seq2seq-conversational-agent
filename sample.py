@@ -30,8 +30,6 @@ flags.DEFINE_string('output_file', '', 'Name of the file wo write outputs to')
 
 BATCH_SIZE = 256
 
-# TODO: make sure you write the outputs in order
-
 def main():
     test_outputs = {}
     with tf.Session() as sess:

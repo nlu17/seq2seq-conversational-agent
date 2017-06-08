@@ -18,80 +18,79 @@ from os.path import isfile, join
 _buckets = []
 max_source_length = 0
 max_target_length = 0
-#_buckets = [(10, 10), (50, 15), (100, 20), (200, 50)]
 
 flags = tf.app.flags
 FLAGS = flags.FLAGS
 flags.DEFINE_string('checkpoint_dir', 'data/checkpoints/', 'Directory to store/restore checkpoints')
 flags.DEFINE_string('data_dir', "data/", "Data storage directory")
 flags.DEFINE_boolean('with_attention', False, "If the model uses attention")
+flags.DEFINE_string('custom_decoder', "", "model decoder")
 flags.DEFINE_string('ckpt_file', '', "Checkpoint file")
 flags.DEFINE_integer('static_temp', 60, 'number between 0 and 100. The lower the number the less likely static responses will come up')
-#flags.DEFINE_string('text', 'Hello World!', 'Text to sample with.')
 
-
-#Read in static data to fuzzy matcher.
-#Assumes static_data has text files with discrete (source, target) pairs
-#Sources are on odd lines n_i, targets are on even lines n_{i+1}
-static_sources = []
-static_targets = []
+if FLAGS.custom_decoder == "default":
+    import tf.contrib.legacy_seq2seq as seq2seq
+elif FLAGS.custom_decoder == "mmi":
+    import mmi_seq2seq as seq2seq
+elif FLAGS.custom_decoder == "beam":
+    import beam_seq2seq as seq2seq
+else:
+    raise NotImplementedError
 
 def main():
-	with tf.Session() as sess:
-		model = loadModel(sess, FLAGS.checkpoint_dir, FLAGS.ckpt_file)
-		print(_buckets)
-		model.batch_size = 1
-		vocab = vocab_utils.VocabMapper(FLAGS.data_dir)
-		sys.stdout.write(">")
-		sys.stdout.flush()
-		sentence = sys.stdin.readline().lower()
-		conversation_history = [sentence]
+    with tf.Session() as sess:
+        vocab = vocab_utils.VocabMapper(FLAGS.data_dir)
+        vocab_prior = vocab.getLogPrior()
+        model = loadModel(sess, FLAGS.checkpoint_dir, FLAGS.ckpt_file, vocab_prior)
+        print(_buckets)
+        model.batch_size = 1
+        sys.stdout.write(">")
+        sys.stdout.flush()
+        sentence = sys.stdin.readline().lower()
+        conversation_history = [sentence]
 
-		while sentence:
-			use_static_match = False
-			if len(static_sources) > 0:
-				#static_match = process.extractOne(sentence, static_sources)
-				#Check is static match is close enough to original input
-				best_ratio = 0
-				static_match = ""
-				for s in static_sources:
-					score = fuzz.partial_ratio(sentence, s)
-					if score > best_ratio:
-						static_match = s
-						best_ratio = score
-				if best_ratio > FLAGS.static_temp:
-					use_static_match = True
-					#Find corresponding target in static list, bypass neural net output
-					convo_output = static_targets[static_sources.index(static_match)]
+        while sentence:
+            token_ids = list(reversed(vocab.tokens2Indices(" ".join(conversation_history))))
+            bucket_id = min([b for b in xrange(len(_buckets))
+                    if _buckets[b][0] > len(token_ids)])
 
-			if not use_static_match:
-				token_ids = list(reversed(vocab.tokens2Indices(" ".join(conversation_history))))
-				bucket_id = min([b for b in xrange(len(_buckets))
-					if _buckets[b][0] > len(token_ids)])
+            encoder_inputs, decoder_inputs, target_weights = model.get_batch(
+            {bucket_id: [(token_ids, [])]}, bucket_id)
 
-				encoder_inputs, decoder_inputs, target_weights = model.get_batch(
-				{bucket_id: [(token_ids, [])]}, bucket_id)
+            _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
+                    target_weights, bucket_id, True)
 
-				_, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
-					target_weights, bucket_id, True)
+            step_outputs = [int(np.argmax(logit, axis=1)) for logit in output_logits]
+            outputs = []
+            for i,logit in enumerate(output_logits):
+                if FLAGS.custom_decoder == "mmi":
+                    if i < seq2seq.GAMMA:
+                        log_probts = tf.nn.log_softmax(logit)      # p(T|S)
+                        log_probts_sub = tf.subtract(log_probts, tf.scalar_mul(seq2seq.LAMBDA, vocab_prior))   # p(T|S) - λ.p(T)
+                        output = tf.argmax(log_probts_sub, 1)
+                    else:
+                        output = tf.argmax(logit, 1)
+                    outputs.append(sess.run(output)[0])
+                    print("CACAT", outputs[-1])
+                else:
+                    raise NotImplementedError
 
-				#TODO implement beam search
-				outputs = [int(np.argmax(logit, axis=1)) for logit in output_logits]
+            if vocab_utils.EOS_ID in outputs:
+                    outputs = outputs[:outputs.index(vocab_utils.EOS_ID)]
 
-				if vocab_utils.EOS_ID in outputs:
-					outputs = outputs[:outputs.index(vocab_utils.EOS_ID)]
+            convo_output =  " ".join(vocab.indices2Tokens(outputs))
+            step_convo_output =  " ".join(vocab.indices2Tokens(step_outputs))
 
-				convo_output =  " ".join(vocab.indices2Tokens(outputs))
+            conversation_history.append(convo_output)
+            print("OUT", convo_output)
+            print("STEP_OUT", step_convo_output)
+            sys.stdout.write(">")
+            sys.stdout.flush()
+            sentence = sys.stdin.readline().lower()
+            conversation_history.append(sentence)
+            conversation_history = conversation_history[-1:]
 
-			conversation_history.append(convo_output)
-			print(convo_output)
-			sys.stdout.write(">")
-			sys.stdout.flush()
-			sentence = sys.stdin.readline().lower()
-			conversation_history.append(sentence)
-			conversation_history = conversation_history[-1:]
-
-def loadModel(session, path, checkpoint_file):
+def loadModel(session, path, checkpoint_file, vocab_prior=None):
     global _buckets
     global max_source_length
     global max_target_length
@@ -106,8 +105,8 @@ def loadModel(session, path, checkpoint_file):
         _buckets = buckets
     model = models.chatbot.ChatbotModel(params["vocab_size"], _buckets,
         params["hidden_size"], 1.0, params["num_layers"], params["grad_clip"],
-        1, params["learning_rate"], params["lr_decay_factor"], 512, True,
-        with_attention=FLAGS.with_attention)
+        1, params["learning_rate"], params["lr_decay_factor"], num_samples=512, forward_only=True,
+        with_attention=FLAGS.with_attention, custom_decoder=FLAGS.custom_decoder, vocab_prior=vocab_prior)
 
     print("Reading model parameters from {0}".format(checkpoint_file))
     model.saver.restore(session, checkpoint_file)
