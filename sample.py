@@ -82,7 +82,7 @@ def main():
 
                     # Compute BLEU score.
                     intersection = Counter(out) & Counter(decoder_inputs[i])
-                    bleu = (1 + sum(intersection.values())) / (decoder_inputs.shape[1] - 1)
+                    bleu = (1 + sum(intersection.values())) / out.shape[0]
 
                     test_outputs[input_id] = [convo_output, bleu]
 

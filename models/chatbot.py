@@ -44,7 +44,7 @@ class ChatbotModel(object):
         self.custom_decoder = custom_decoder
 
         if custom_decoder == "default":
-            import tf.contrib.legacy_seq2seq as seq2seq
+            import tensorflow.contrib.legacy_seq2seq as seq2seq
         elif custom_decoder == "mmi":
             import mmi_seq2seq as seq2seq
             seq2seq.log_prior = vocab_prior

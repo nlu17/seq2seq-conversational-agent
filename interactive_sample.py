@@ -29,7 +29,7 @@ flags.DEFINE_string('ckpt_file', '', "Checkpoint file")
 flags.DEFINE_integer('static_temp', 60, 'number between 0 and 100. The lower the number the less likely static responses will come up')
 
 if FLAGS.custom_decoder == "default":
-    import tf.contrib.legacy_seq2seq as seq2seq
+    import tensorflow.contrib.legacy_seq2seq as seq2seq
 elif FLAGS.custom_decoder == "mmi":
     import mmi_seq2seq as seq2seq
 elif FLAGS.custom_decoder == "beam":
@@ -72,6 +72,9 @@ def main():
                         output = tf.argmax(logit, 1)
                     outputs.append(sess.run(output)[0])
                     print("CACAT", outputs[-1])
+                elif FLAGS.custom_decoder == "default":
+                    output = tf.argmax(logit, 1)
+                    outputs.append(sess.run(output)[0])
                 else:
                     raise NotImplementedError
 

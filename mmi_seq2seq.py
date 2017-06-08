@@ -79,8 +79,8 @@ import tensorflow as tf
 linear = core_rnn_cell_impl._linear  # pylint: disable=protected-access
 
 log_prior = None
-GAMMA = 3    # word limit for anti language penalty
-LAMBDA = 0.5  # weight of anti-language compare to p(T|S)
+GAMMA = 4    # word limit for anti language penalty
+LAMBDA = 0.8  # weight of anti-language compare to p(T|S)
 
 def _extract_argmax_and_embed(embedding,
                               output_projection=None,
@@ -136,12 +136,14 @@ def _extract_mmiargmax_and_embed(embedding,
     else:
       prev_symbol = math_ops.argmax(prev, 1)
 
+    prev_symbol = math_ops.argmax(prev, 1)
+
     # Note that gradients will not propagate through the second parameter of
     # embedding_lookup.
     emb_prev = embedding_ops.embedding_lookup(embedding, prev_symbol)
     if not update_embedding:
       emb_prev = array_ops.stop_gradient(emb_prev)
-    return prev_symbol, emb_prev
+    return emb_prev
 
   return loop_function
 
@@ -149,7 +151,8 @@ def rnn_decoder(decoder_inputs,
                 initial_state,
                 cell,
                 loop_function=None,
-                scope=None):
+                scope=None,
+                output_projection=None):
   """RNN decoder for the sequence-to-sequence model.
 
   Args:
@@ -186,6 +189,7 @@ def rnn_decoder(decoder_inputs,
       if i > 0:
         variable_scope.get_variable_scope().reuse_variables()
       output, state = cell(inp, state)
+
       outputs.append(output)
       if loop_function is not None:
         prev = output
@@ -324,13 +328,14 @@ def embedding_rnn_decoder(decoder_inputs,
 
     embedding = variable_scope.get_variable("embedding",
                                             [num_symbols, embedding_size])
-    loop_function = _extract_argmax_and_embed(
+    loop_function = _extract_mmiargmax_and_embed(
         embedding, output_projection,
         update_embedding_for_previous) if feed_previous else None
     emb_inp = (embedding_ops.embedding_lookup(embedding, i)
                for i in decoder_inputs)
     return rnn_decoder(
-        emb_inp, initial_state, cell, loop_function=loop_function)
+        emb_inp, initial_state, cell, loop_function=loop_function,
+        output_projection=output_projection)
 
 
 def embedding_rnn_seq2seq(encoder_inputs,
@@ -580,7 +585,8 @@ def attention_decoder(decoder_inputs,
                       loop_function=None,
                       dtype=None,
                       scope=None,
-                      initial_state_attention=False):
+                      initial_state_attention=False,
+                      output_projection=None):
   """RNN decoder with attention for the sequence-to-sequence model.
 
   In this context "attention" means that, during decoding, the RNN can look up
@@ -727,6 +733,7 @@ def attention_decoder(decoder_inputs,
 
       with variable_scope.variable_scope("AttnOutputProjection"):
         output = linear([cell_output] + attns, output_size, True)
+
       if loop_function is not None:
         prev = output
       outputs.append(output)
@@ -803,7 +810,7 @@ def embedding_attention_decoder(decoder_inputs,
 
     embedding = variable_scope.get_variable("embedding",
                                             [num_symbols, embedding_size])
-    loop_function = _extract_argmax_and_embed(
+    loop_function = _extract_mmiargmax_and_embed(
         embedding, output_projection,
         update_embedding_for_previous) if feed_previous else None
     emb_inp = [
@@ -817,7 +824,8 @@ def embedding_attention_decoder(decoder_inputs,
         output_size=output_size,
         num_heads=num_heads,
         loop_function=loop_function,
-        initial_state_attention=initial_state_attention)
+        initial_state_attention=initial_state_attention,
+        output_projection=output_projection)
 
 
 def embedding_attention_seq2seq(encoder_inputs,
