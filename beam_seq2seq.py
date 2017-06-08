@@ -599,11 +599,12 @@ def beam_attention_decoder(decoder_inputs, initial_state, attention_states, cell
 
     #print("Initial_state")
 
-    state_size =  int(initial_state.get_shape().with_rank(2)[1])
-    states =[]
-    for kk in range(1):
-        states.append(initial_state)
-    state = tf.reshape(tf.concat(states, 0), [-1, state_size])
+    #state_size =  int(initial_state.get_shape().with_rank(2)[1])
+    #states =[]
+    #for kk in range(1):
+    #    states.append(initial_state)
+    #state = tf.reshape(tf.concat(states, 0), [-1, state_size])
+    state = initial_state
     def attention(query):
       """Put attention masks on hidden using hidden_features and query."""
       ds = []  # Results of attention reads will be stored here.
@@ -666,10 +667,13 @@ def beam_attention_decoder(decoder_inputs, initial_state, attention_states, cell
       if loop_function is not None:
         prev = output
       if  i ==0:
-          states =[]
+          cstates, hstates = [], []
           for kk in range(beam_size):
-                states.append(state)
-          state = tf.reshape(tf.concat(states, 0), [-1, state_size])
+                cstates.append(state[0])
+                hstates.append(state[1])
+          cstate = tf.concat(cstates, 0)
+          hstate = tf.concat(hstates, 0)
+          state = (cstate, hstate)
           with variable_scope.variable_scope(variable_scope.get_variable_scope(), reuse=True):
                 attns = attention(state)
 
