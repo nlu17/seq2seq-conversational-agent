@@ -7,7 +7,6 @@ import random
 import numpy as np
 from six.moves import xrange
 import tensorflow as tf
-import mmi_functions as mmi
 
 import util.vocabutils as vocab_utils
 
@@ -43,7 +42,7 @@ class ChatbotModel(object):
         self.dropout_keep_prob_lstm_output = tf.constant(self.dropout)
         self.with_attention = with_attention
         self.custom_decoder = custom_decoder
-        
+
         if custom_decoder == "default":
             import tf.contrib.legacy_seq2seq as seq2seq
         elif custom_decoder == "mmi":

@@ -81,13 +81,13 @@ class VocabMapper(object):
               print(s[0], "blah", rev_vocab[i])
             assert s[0] == rev_vocab[i], "Vocabulary order different??"
             if len(s) == 2:
-                counts[i] = float(s[1]) 
+                counts[i] = float(s[1])
         maxcnt = max(counts)
         for special in _START_VOCAB:
             i = self.vocab[special]
             assert counts[i] == 0, "Count of special non zero"
             counts[i] = maxcnt
-        tf_counts = tf.convert_to_tensor(counts, dtype=tf.float32) 
+        tf_counts = tf.convert_to_tensor(counts, dtype=tf.float32)
         tot_count = tf.reduce_sum(tf_counts)
         prior = tf.div(tf_counts, tot_count)
         self.log_prior =  tf.log(prior)

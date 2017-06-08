@@ -73,6 +73,8 @@ from tensorflow.python.ops import nn_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.util import nest
 
+import tensorflow as tf
+
 # TODO(ebrevdo): Remove once _linear is fully deprecated.
 linear = core_rnn_cell_impl._linear  # pylint: disable=protected-access
 

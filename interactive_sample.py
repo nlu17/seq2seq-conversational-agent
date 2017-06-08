@@ -73,7 +73,7 @@ def main():
                     else:
                         output = tf.argmax(logit, 1)
                     outputs.append(sess.run(output)[0])
-                    #print(outputs[-1])
+                    print(outputs[-1])
                 else:
                     raise NotImplementedError
 
