@@ -14,7 +14,8 @@ class ChatbotModel(object):
     def __init__(self, vocab_size, buckets, hidden_size, dropout,
                  num_layers, max_gradient_norm, batch_size, learning_rate,
                  lr_decay_factor, num_samples=512, forward_only=False,
-                 with_attention=False, custom_decoder="default", vocab_prior=None):
+                 with_attention=False, custom_decoder="default", vocab_prior=None,
+                 beam_size=7):
         '''
         vocab_size: number of vocab tokens
         buckets: buckets of max sequence lengths
@@ -29,6 +30,7 @@ class ChatbotModel(object):
         with_attention: attention model or not
         custom_decoder: type of decoder
         vocab_prior: useful for MMI Decoder
+        beam_size: beam_size
         '''
         self.vocab_size = vocab_size
         self.buckets = buckets
@@ -42,6 +44,8 @@ class ChatbotModel(object):
         self.dropout_keep_prob_lstm_output = tf.constant(self.dropout)
         self.with_attention = with_attention
         self.custom_decoder = custom_decoder
+        self.beam_size = beam_size
+        self.beam_search = False
 
         if custom_decoder == "default":
             import tf.contrib.legacy_seq2seq as seq2seq
@@ -50,6 +54,7 @@ class ChatbotModel(object):
             seq2seq.log_prior = vocab_prior
         elif custom_decoder == "beam":
             import beam_seq2seq as seq2seq
+            self.beam_search = True
         else:
             raise NotImplementedError
 
@@ -65,18 +70,6 @@ class ChatbotModel(object):
             b = tf.get_variable("proj_b", [self.vocab_size])
             output_projection = (w, b)
 
-        #def sampled_loss(labels, inputs):
-        #    labels = tf.reshape(labels, [-1, 1])
-        #    return tf.nn.sampled_softmax_loss(w_t, b, labels, inputs, num_samples,
-        #                                        self.vocab_size)
-        #softmax_loss_function = sampled_loss
-
-        #cell = tf.contrib.rnn.DropoutWrapper(
-        #    tf.contrib.rnn.BasicLSTMCell(hidden_size),
-        #    input_keep_prob=self.dropout_keep_prob_lstm_input,
-        #    output_keep_prob=self.dropout_keep_prob_lstm_output)
-        #if num_layers > 1:
-        #    cell = tf.contrib.rnn.MultiRNNCell([cell] * num_layers)
 
         def sampled_loss(labels, inputs):
             labels = tf.reshape(labels, [-1, 1])
@@ -112,12 +105,14 @@ class ChatbotModel(object):
                 s2s = seq2seq.embedding_attention_seq2seq(
                     encoder_inputs, decoder_inputs, cell, num_encoder_symbols=vocab_size,
                     num_decoder_symbols=vocab_size, embedding_size=hidden_size,
-                    output_projection=output_projection, feed_previous=do_decode_with_mmi)
+                    output_projection=output_projection, feed_previous=do_decode_with_mmi,
+                    beam_search=self.beam_search, beam_size=self.beam_size)
             else:
                 s2s = seq2seq.embedding_rnn_seq2seq(
                     encoder_inputs, decoder_inputs, cell, num_encoder_symbols=vocab_size,
                     num_decoder_symbols=vocab_size, embedding_size=hidden_size,
-                    output_projection=output_projection, feed_previous=do_decode_with_mmi)
+                    output_projection=output_projection, feed_previous=do_decode_with_mmi,
+                    beam_search=self.beam_search, beam_size=self.beam_size)
 
             return s2s
 
@@ -139,16 +134,22 @@ class ChatbotModel(object):
                    for i in xrange(len(self.decoder_inputs) - 1)]
 
         if forward_only:
-            self.outputs, self.losses = seq2seq.model_with_buckets(
-                self.encoder_inputs, self.decoder_inputs, targets,
-                self.target_weights, buckets, lambda x, y: seq2seq_f(x, y, True, self.with_attention),
-                softmax_loss_function=softmax_loss_function)
-            if output_projection is not None:
-                for b in xrange(len(buckets)):
-                    self.outputs[b] = [
-                        tf.matmul(output, output_projection[0]) + output_projection[1]
-                        for output in self.outputs[b]
-                    ]
+            if self.beam_search:
+                self.outputs, self.beam_path, self.beam_symbol = seq2seq.decode_model_with_buckets(
+                    self.encoder_inputs, self.decoder_inputs, targets,
+                    self.target_weights, buckets, lambda x, y: seq2seq_f(x, y, True, self.with_attention),
+                    softmax_loss_function=softmax_loss_function)
+            else:
+                self.outputs, self.losses = seq2seq.model_with_buckets(
+                    self.encoder_inputs, self.decoder_inputs, targets,
+                    self.target_weights, buckets, lambda x, y: seq2seq_f(x, y, True, self.with_attention),
+                    softmax_loss_function=softmax_loss_function)
+                if output_projection is not None:
+                    for b in xrange(len(buckets)):
+                        self.outputs[b] = [
+                            tf.matmul(output, output_projection[0]) + output_projection[1]
+                            for output in self.outputs[b]
+                        ]
         else:
             self.outputs, self.losses = seq2seq.model_with_buckets(
                 self.encoder_inputs, self.decoder_inputs, targets,
@@ -214,7 +215,7 @@ class ChatbotModel(object):
             batch_weights.append(batch_weight)
         return batch_encoder_inputs, batch_decoder_inputs, batch_weights
 
-    def step(self, session, encoder_inputs, decoder_inputs, target_weights, bucket_id, forward_only):
+    def step(self, session, encoder_inputs, decoder_inputs, target_weights, bucket_id, forward_only, beam_search=False):
         '''
         Inputs:
 
@@ -248,11 +249,18 @@ class ChatbotModel(object):
                            self.gradient_norms[bucket_id],  # Gradient norm.
                            self.losses[bucket_id]]
         else:
-            output_feed = [self.losses[bucket_id]]  # Loss for this batch.
+            if self.beam_search:
+                output_feed = [self.beam_path[bucket_id]]  # Loss for this batch.
+                output_feed.append(self.beam_symbol[bucket_id])
+            else:
+                output_feed = [self.losses[bucket_id]]  # Loss for this batch.
             for l in xrange(decoder_size):  # Output logits.
                 output_feed.append(self.outputs[bucket_id][l])
         outputs = session.run(output_feed, input_feed)
         if not forward_only:
             return outputs[1], outputs[2], None
         else:
-            return None, outputs[0], outputs[1:]
+            if self.beam_search:
+                return outputs[0], outputs[1], outputs[2:]
+            else:
+                return None, outputs[0], outputs[1:]
