@@ -57,36 +57,43 @@ def main():
             encoder_inputs, decoder_inputs, target_weights = model.get_batch(
             {bucket_id: [(token_ids, [])]}, bucket_id)
 
-            _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
+            first, second, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
                     target_weights, bucket_id, True)
 
-            step_outputs = [int(np.argmax(logit, axis=1)) for logit in output_logits]
-            outputs = []
-            for i,logit in enumerate(output_logits):
-                if FLAGS.custom_decoder == "mmi":
-                    if i < seq2seq.GAMMA:
-                        log_probts = tf.nn.log_softmax(logit)      # p(T|S)
-                        log_probts_sub = tf.subtract(log_probts, tf.scalar_mul(seq2seq.LAMBDA, vocab_prior))   # p(T|S) - λ.p(T)
-                        output = tf.argmax(log_probts_sub, 1)
-                    else:
-                        output = tf.argmax(logit, 1)
-                    outputs.append(sess.run(output)[0])
-                    print("CACAT", outputs[-1])
-                elif FLAGS.custom_decoder == "default":
-                    output = tf.argmax(logit, 1)
-                    outputs.append(sess.run(output)[0])
-                else:
-                    raise NotImplementedError
+#             step_outputs = [int(np.argmax(logit, axis=1)) for logit in output_logits]
 
-            if vocab_utils.EOS_ID in outputs:
-                    outputs = outputs[:outputs.index(vocab_utils.EOS_ID)]
+            outputs = [None] * model.beam_size
+            if FLAGS.custom_decoder == "mmi":
+                for i,logit in enumerate(output_logits):
+                        if i < seq2seq.GAMMA:
+                            log_probts = tf.nn.log_softmax(logit)      # p(T|S)
+                            log_probts_sub = tf.subtract(log_probts, tf.scalar_mul(seq2seq.LAMBDA, vocab_prior))   # p(T|S) - λ.p(T)
+                            output = tf.argmax(log_probts_sub, 1)
+                        else:
+                            output = tf.argmax(logit, 1)
+                        outputs[0].append(sess.run(output)[0])
+                        print(outputs[0][-1])
 
-            convo_output =  " ".join(vocab.indices2Tokens(outputs))
-            step_convo_output =  " ".join(vocab.indices2Tokens(step_outputs))
+            elif FLAGS.custom_decoder == "beam":
+                #print("Second", second[i])
+                for j in xrange(model.beam_size):
+                  outputs[j] = second[:, j].tolist()
+            elif FLAGS.custom_decoder == "default":
+                output = tf.argmax(logit, 1)
+                outputs[0].append(sess.run(output)[0])
+            else:
+                raise NotImplementedError
+
+            for i in xrange(len(outputs)):
+                if vocab_utils.EOS_ID in outputs[i]:
+                    outputs[i] = outputs[i][:outputs[i].index(vocab_utils.EOS_ID)]
+
+            convo_output =  [" ".join(vocab.indices2Tokens(output)) for output in outputs]
 
             conversation_history.append(convo_output)
-            print("OUT", convo_output)
-            print("STEP_OUT", step_convo_output)
+            for c_output in convo_output:
+              if len(c_output) > 0:
+                print(c_output)
             sys.stdout.write(">")
             sys.stdout.flush()
             sentence = sys.stdin.readline().lower()
