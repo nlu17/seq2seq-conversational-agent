@@ -62,7 +62,7 @@ def main():
 
 #             step_outputs = [int(np.argmax(logit, axis=1)) for logit in output_logits]
 
-            outputs = [None] * model.beam_size
+            outputs = [[]]
             if FLAGS.custom_decoder == "mmi":
                 for i,logit in enumerate(output_logits):
                         if i < seq2seq.GAMMA:
@@ -76,11 +76,13 @@ def main():
 
             elif FLAGS.custom_decoder == "beam":
                 #print("Second", second[i])
+                outputs = outputs * model.beam_size
                 for j in xrange(model.beam_size):
                   outputs[j] = second[:, j].tolist()
             elif FLAGS.custom_decoder == "default":
-                output = tf.argmax(logit, 1)
-                outputs[0].append(sess.run(output)[0])
+                for i,logit in enumerate(output_logits):
+                    output = tf.argmax(logit, 1)
+                    outputs[0].append(sess.run(output)[0])
             else:
                 raise NotImplementedError
 

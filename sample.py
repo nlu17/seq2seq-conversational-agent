@@ -27,8 +27,18 @@ flags.DEFINE_string('data_dir', "data/", "Data storage directory")
 flags.DEFINE_string('with_attention', False, "If the model uses attention")
 flags.DEFINE_string('ckpt_file', '', "Checkpoint file")
 flags.DEFINE_string('output_file', '', 'Name of the file wo write outputs to')
+flags.DEFINE_string('custom_decoder', "", "model decoder")
 
 BATCH_SIZE = 256
+
+if FLAGS.custom_decoder == "default":
+    import tensorflow.contrib.legacy_seq2seq as seq2seq
+elif FLAGS.custom_decoder == "mmi":
+    import mmi_seq2seq as seq2seq
+elif FLAGS.custom_decoder == "beam":
+    import beam_seq2seq as seq2seq
+else:
+    raise NotImplementedError
 
 def main():
     test_outputs = {}

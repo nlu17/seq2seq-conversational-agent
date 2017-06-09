@@ -46,12 +46,14 @@ class ChatbotModel(object):
         self.custom_decoder = custom_decoder
         self.beam_size = beam_size
         self.beam_search = False
+        self.mmi = False
 
         if custom_decoder == "default":
             import tensorflow.contrib.legacy_seq2seq as seq2seq
         elif custom_decoder == "mmi":
             import mmi_seq2seq as seq2seq
             seq2seq.log_prior = vocab_prior
+            self.mmi = True
         elif custom_decoder == "beam":
             import beam_seq2seq as seq2seq
             self.beam_search = True
@@ -102,17 +104,35 @@ class ChatbotModel(object):
         def seq2seq_f(encoder_inputs, decoder_inputs, do_decode_with_mmi, with_attention):
             s2s = None
             if with_attention:
-                s2s = seq2seq.embedding_attention_seq2seq(
-                    encoder_inputs, decoder_inputs, cell, num_encoder_symbols=vocab_size,
-                    num_decoder_symbols=vocab_size, embedding_size=hidden_size,
-                    output_projection=output_projection, feed_previous=do_decode_with_mmi,
-                    beam_search=self.beam_search, beam_size=self.beam_size)
+                if self.beam_search:
+                    s2s = seq2seq.embedding_attention_seq2seq(
+                        encoder_inputs, decoder_inputs, cell, num_encoder_symbols=vocab_size,
+                        num_decoder_symbols=vocab_size, embedding_size=hidden_size,
+                        output_projection=output_projection, feed_previous=do_decode_with_mmi,
+                        beam_search=self.beam_search, beam_size=self.beam_size)
+                elif self.mmi:
+                    s2s = seq2seq.embedding_attention_seq2seq(
+                        encoder_inputs, decoder_inputs, cell, num_encoder_symbols=vocab_size,
+                        num_decoder_symbols=vocab_size, embedding_size=hidden_size,
+                        output_projection=output_projection, feed_previous=do_decode_with_mmi,
+                        mmi=self.mmi)
+                else:
+                    s2s = seq2seq.embedding_attention_seq2seq(
+                        encoder_inputs, decoder_inputs, cell, num_encoder_symbols=vocab_size,
+                        num_decoder_symbols=vocab_size, embedding_size=hidden_size,
+                        output_projection=output_projection, feed_previous=do_decode_with_mmi)
             else:
-                s2s = seq2seq.embedding_rnn_seq2seq(
-                    encoder_inputs, decoder_inputs, cell, num_encoder_symbols=vocab_size,
-                    num_decoder_symbols=vocab_size, embedding_size=hidden_size,
-                    output_projection=output_projection, feed_previous=do_decode_with_mmi,
-                    beam_search=self.beam_search, beam_size=self.beam_size)
+                if self.beam_search:
+                    s2s = seq2seq.embedding_rnn_seq2seq(
+                        encoder_inputs, decoder_inputs, cell, num_encoder_symbols=vocab_size,
+                        num_decoder_symbols=vocab_size, embedding_size=hidden_size,
+                        output_projection=output_projection, feed_previous=do_decode_with_mmi,
+                        beam_search=self.beam_search, beam_size=self.beam_size)
+                else:
+                    s2s = seq2seq.embedding_rnn_seq2seq(
+                        encoder_inputs, decoder_inputs, cell, num_encoder_symbols=vocab_size,
+                        num_decoder_symbols=vocab_size, embedding_size=hidden_size,
+                        output_projection=output_projection, feed_previous=do_decode_with_mmi)
 
             return s2s
 
@@ -136,6 +156,11 @@ class ChatbotModel(object):
         if forward_only:
             if self.beam_search:
                 self.outputs, self.beam_path, self.beam_symbol = seq2seq.decode_model_with_buckets(
+                    self.encoder_inputs, self.decoder_inputs, targets,
+                    self.target_weights, buckets, lambda x, y: seq2seq_f(x, y, True, self.with_attention),
+                    softmax_loss_function=softmax_loss_function)
+            if self.mmi:
+                self.outputs, self.mmi_symbol = seq2seq.decode_model_with_buckets(
                     self.encoder_inputs, self.decoder_inputs, targets,
                     self.target_weights, buckets, lambda x, y: seq2seq_f(x, y, True, self.with_attention),
                     softmax_loss_function=softmax_loss_function)
@@ -215,7 +240,8 @@ class ChatbotModel(object):
             batch_weights.append(batch_weight)
         return batch_encoder_inputs, batch_decoder_inputs, batch_weights
 
-    def step(self, session, encoder_inputs, decoder_inputs, target_weights, bucket_id, forward_only, beam_search=False):
+    def step(self, session, encoder_inputs, decoder_inputs, target_weights,
+            bucket_id, forward_only):
         '''
         Inputs:
 
@@ -252,6 +278,8 @@ class ChatbotModel(object):
             if self.beam_search:
                 output_feed = [self.beam_path[bucket_id]]  # Loss for this batch.
                 output_feed.append(self.beam_symbol[bucket_id])
+            elif self.mmi:
+                output_feed.append(self.mmi_symbol[bucket_id])
             else:
                 output_feed = [self.losses[bucket_id]]  # Loss for this batch.
             for l in xrange(decoder_size):  # Output logits.
@@ -262,5 +290,7 @@ class ChatbotModel(object):
         else:
             if self.beam_search:
                 return outputs[0], outputs[1], outputs[2:]
+            elif self.mmi:
+                return None, outputs[0], outputs[1:]
             else:
                 return None, outputs[0], outputs[1:]

@@ -477,7 +477,7 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, cell,
 
     outputs = []
     prev = None
-    batch_attn_size = array_ops.pack([batch_size, attn_size])
+    batch_attn_size = array_ops.stack([batch_size, attn_size])
     attns = [array_ops.zeros(batch_attn_size, dtype=dtype)
              for _ in xrange(num_heads)]
     for a in attns:  # Ensure the second shape of attention vectors is set.
@@ -834,35 +834,80 @@ def embedding_attention_seq2seq(encoder_inputs, decoder_inputs, cell,
       state: The state of each decoder cell at the final time-step.
         It is a 2D Tensor of shape [batch_size x cell.state_size].
   """
-  with variable_scope.variable_scope(scope or "embedding_attention_seq2seq"):
+  with variable_scope.variable_scope(
+      scope or "embedding_attention_seq2seq", dtype=dtype) as scope:
+    dtype = scope.dtype
     # Encoder.
-    encoder_cell = rnn_cell.EmbeddingWrapper(
-        cell, embedding_classes=num_encoder_symbols,
+    encoder_cell = core_rnn_cell.EmbeddingWrapper(
+        cell,
+        embedding_classes=num_encoder_symbols,
         embedding_size=embedding_size)
-    encoder_outputs, encoder_state = rnn.static_rnn(
+    encoder_outputs, encoder_state = core_rnn.static_rnn(
         encoder_cell, encoder_inputs, dtype=dtype)
-    #print "Symbols"
-    #print num_encoder_symbols
-    #print num_decoder_symbols
+
     # First calculate a concatenation of encoder outputs to put attention on.
-    top_states = [array_ops.reshape(e, [-1, 1, cell.output_size])
-                  for e in encoder_outputs]
+    top_states = [
+        array_ops.reshape(e, [-1, 1, cell.output_size]) for e in encoder_outputs
+    ]
     attention_states = array_ops.concat(top_states, 1)
     print("ATTENTION STATES", attention_states)
+
     # Decoder.
     output_size = None
     if output_projection is None:
-      cell = rnn_cell.OutputProjectionWrapper(cell, num_decoder_symbols)
+      cell = core_rnn_cell.OutputProjectionWrapper(cell, num_decoder_symbols)
       output_size = num_decoder_symbols
 
-
-    return embedding_attention_decoder(
-          decoder_inputs, encoder_state, attention_states, cell,
-          num_decoder_symbols, embedding_size, num_heads=num_heads,
-          output_size=output_size, output_projection=output_projection,
+    if isinstance(feed_previous, bool):
+      return embedding_attention_decoder(
+          decoder_inputs,
+          encoder_state,
+          attention_states,
+          cell,
+          num_decoder_symbols,
+          embedding_size,
+          num_heads=num_heads,
+          output_size=output_size,
+          output_projection=output_projection,
           feed_previous=feed_previous,
-          initial_state_attention=initial_state_attention, beam_search=beam_search, beam_size=beam_size)
+          initial_state_attention=initial_state_attention,
+          beam_search=beam_search, beam_size=beam_size)
 
+    # If feed_previous is a Tensor, we construct 2 graphs and use cond.
+    def decoder(feed_previous_bool):
+      reuse = None if feed_previous_bool else True
+      with variable_scope.variable_scope(
+          variable_scope.get_variable_scope(), reuse=reuse) as scope:
+        outputs, state, beam_paths, beam_symbols = embedding_attention_decoder(
+            decoder_inputs,
+            encoder_state,
+            attention_states,
+            cell,
+            num_decoder_symbols,
+            embedding_size,
+            num_heads=num_heads,
+            output_size=output_size,
+            output_projection=output_projection,
+            feed_previous=feed_previous_bool,
+            update_embedding_for_previous=False,
+            initial_state_attention=initial_state_attention,
+            beam_search=beam_search, beam_size=beam_size)
+        state_list = [state]
+        if nest.is_sequence(state):
+          state_list = nest.flatten(state)
+        return outputs + state_list, beam_paths, beam_symbols
+
+    outputs_and_state, beam_paths, beam_symbols = control_flow_ops.cond(feed_previous,
+                                              lambda: decoder(True),
+                                              lambda: decoder(False))
+    outputs_len = len(decoder_inputs)  # Outputs length same as decoder inputs.
+    state_list = outputs_and_state[outputs_len:]
+    state = state_list[0]
+    if nest.is_sequence(encoder_state):
+      state = nest.pack_sequence_as(
+          structure=encoder_state, flat_sequence=state_list)
+
+    return outputs_and_state[:outputs_len], state, beam_paths, beam_symbols
 
 
 
