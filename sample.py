@@ -65,7 +65,7 @@ def main():
 
                 outputs = []
                 if FLAGS.custom_decoder == "mmi":
-                    outputs = [np.argmax(logit, axis=1).astype(int) for logit in output_logits]
+                    outputs = [out for out in output_symbols]
                 elif FLAGS.custom_decoder == "default":
                     # bucket_size x BATCH_SIZE x vocab_size
                     outputs = [np.argmax(logit, axis=1).astype(int) for logit in output_logits]
