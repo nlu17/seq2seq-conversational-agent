@@ -60,29 +60,28 @@ def main():
             while batch is not None:
                 curr_batch_size, encoder_inputs, decoder_inputs, target_weights, input_ids = batch
 
-                _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
+                _, output_symbols, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
                         target_weights, bucket_id, True)
 
                 outputs = []
                 if FLAGS.custom_decoder == "mmi":
-                    output_symbols = output_logits
-                    outputs = [output for output in output_symbols]
-                elif FLAGS.custom_decoder == "default":
                     outputs = [np.argmax(logit, axis=1).astype(int) for logit in output_logits]
-#                     for i,logit in enumerate(output_logits):
-#                         output = tf.argmax(logit, 1)
-#                         outputs.append(sess.run(output)[0])
+                elif FLAGS.custom_decoder == "default":
+                    # bucket_size x BATCH_SIZE x vocab_size
+                    outputs = [np.argmax(logit, axis=1).astype(int) for logit in output_logits]
                 else:
                     raise NotImplementedError
-                print("DADA", len(outputs), outputs[0].shape)
 
                 if FLAGS.custom_decoder == "default":
                     probabilities = [softmax(logit) for logit in output_logits]
                     probabilities = [
                             probabilities[i][xrange(BATCH_SIZE), decoder_inputs[i]]
                             for i in xrange(len(decoder_inputs))]
-                else:
-                    probabilities = [0] * len(decoder_inputs)
+                elif FLAGS.custom_decoder == "mmi":
+                    probabilities = [softmax(logit) for logit in output_logits]
+                    probabilities = [
+                            probabilities[i][xrange(BATCH_SIZE), decoder_inputs[i]]
+                            for i in xrange(len(decoder_inputs))]
 
                 decoder_inputs = np.array(decoder_inputs).transpose()
 

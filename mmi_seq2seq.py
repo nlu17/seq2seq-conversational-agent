@@ -741,7 +741,10 @@ def mmi_attention_decoder(decoder_inputs,
 
       if loop_function is not None:
         prev = output
-      outputs.append(output)
+
+      outputs.append(nn_ops.xw_plus_b(
+        output, output_projection[0], output_projection[1])
+          )
 
   return outputs, state, mmi_symbols
 

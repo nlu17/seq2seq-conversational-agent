@@ -291,6 +291,6 @@ class ChatbotModel(object):
             if self.beam_search:
                 return outputs[0], outputs[1], outputs[2:]
             elif self.mmi:
-                return None, None, outputs[0]
+                return None, outputs[0], outputs[1:]
             else:
                 return None, outputs[0], outputs[1:]
