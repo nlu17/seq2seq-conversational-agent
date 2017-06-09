@@ -49,12 +49,13 @@ then
 elif [ $load_model = "diversification" ]
 then
 	echo "Generating results with a 4-layered attention model and a MMI diversification on top of it.."
-	output_file="divers"
+	output_file="ceva_diversification.out"
 	#python3 sample.py --with_attention=True --output_file=ceva_4layer_attention.out --custom_decoder=mmi --checkpoint_dir= --ckpt_file=
+	python3 sample.py --with_attention=True --output_file=ceva_diversification.out --custom_decoder=mmi --checkpoint_dir=data/attention_stored/ --ckpt_file=data/attention_stored/chatbot.ckpt-829000
 elif [ $load_model = "beamsearch" ]
 then
 	echo "Generating results with a 4-layered attention model and a MMI diversification on top of it.."
-	output_file="beamsearch"
+	output_file="ceva_beamsearch.out"
 	#python3 sample.py --with_attention=True --output_file=ceva_4layer_attention.out --custom_decoder=beam --checkpoint_dir= --ckpt_file=
 else
 	echo "We don't have that model. Sorry :-("
@@ -63,4 +64,6 @@ fi
 
 echo "The results have been generated! Responses, bleu scores, perplexity scores are stored in $output_file"
 echo "Prining the results in the required format:"
+#output_file="final_output_${load_model}.txt"
+#echo "Printing the data in $output_file"
 python3 do_the_final_printing.py $output_file > final_output.txt

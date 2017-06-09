@@ -122,7 +122,7 @@ def main():
                 batch = get_batch(test_set, bucket_id)
 
     print("CACAT", test_outputs[0][0], test_outputs[0][1], test_outputs[0][2])
-    with open(FLAGS.data_dir+FLAGS.output_file, "w") as fout:
+    with open(FLAGS.data_dir+FLAGS.output_file, "w", encoding='utf-8') as fout:
         # Write to file in order.
         for input_id in xrange(len(test_outputs)):
             fout.write(test_outputs[input_id][0] + " " +
