@@ -64,8 +64,8 @@ def main():
 
             outputs = [[]]
             if FLAGS.custom_decoder == "mmi":
-                output_symbols = output_logits
-                outputs[0] = output_symbols[0]
+                output_symbols = second
+                outputs[0] = [out[0] for out in output_symbols]
 #                 for i,logit in enumerate(output_logits):
 #                         if i < seq2seq.GAMMA:
 #                             log_probts = tf.nn.log_softmax(logit)      # p(T|S)
