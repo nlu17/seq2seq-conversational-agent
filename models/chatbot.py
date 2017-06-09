@@ -159,7 +159,7 @@ class ChatbotModel(object):
                     self.encoder_inputs, self.decoder_inputs, targets,
                     self.target_weights, buckets, lambda x, y: seq2seq_f(x, y, True, self.with_attention),
                     softmax_loss_function=softmax_loss_function)
-            if self.mmi:
+            elif self.mmi:
                 self.outputs, self.mmi_symbol = seq2seq.decode_model_with_buckets(
                     self.encoder_inputs, self.decoder_inputs, targets,
                     self.target_weights, buckets, lambda x, y: seq2seq_f(x, y, True, self.with_attention),
@@ -279,7 +279,7 @@ class ChatbotModel(object):
                 output_feed = [self.beam_path[bucket_id]]  # Loss for this batch.
                 output_feed.append(self.beam_symbol[bucket_id])
             elif self.mmi:
-                output_feed.append(self.mmi_symbol[bucket_id])
+                output_feed = [self.mmi_symbol[bucket_id]]
             else:
                 output_feed = [self.losses[bucket_id]]  # Loss for this batch.
             for l in xrange(decoder_size):  # Output logits.

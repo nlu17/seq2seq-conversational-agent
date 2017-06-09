@@ -43,7 +43,9 @@ else:
 def main():
     test_outputs = {}
     with tf.Session() as sess:
-        model = loadModel(sess, FLAGS.checkpoint_dir, FLAGS.ckpt_file)
+        vocab = vocab_utils.VocabMapper(FLAGS.data_dir)
+        vocab_prior = vocab.getLogPrior()
+        model = loadModel(sess, FLAGS.checkpoint_dir, FLAGS.ckpt_file, vocab_prior)
 
         test_set = readData(
                 FLAGS.data_dir+"test_source.txt",
@@ -58,16 +60,28 @@ def main():
             while batch is not None:
                 curr_batch_size, encoder_inputs, decoder_inputs, target_weights, input_ids = batch
 
-                _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
+                _, output_symbols, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
                         target_weights, bucket_id, True)
 
-                #TODO implement beam search
-                outputs = [np.argmax(logit, axis=1).astype(int) for logit in output_logits]
+                outputs = []
+                if FLAGS.custom_decoder == "mmi":
+                    outputs = [np.argmax(logit, axis=1).astype(int) for logit in output_logits]
+                elif FLAGS.custom_decoder == "default":
+                    # bucket_size x BATCH_SIZE x vocab_size
+                    outputs = [np.argmax(logit, axis=1).astype(int) for logit in output_logits]
+                else:
+                    raise NotImplementedError
 
-                probabilities = [softmax(logit) for logit in output_logits]
-                probabilities = [
-                        probabilities[i][xrange(BATCH_SIZE), decoder_inputs[i]]
-                        for i in xrange(len(decoder_inputs))]
+                if FLAGS.custom_decoder == "default":
+                    probabilities = [softmax(logit) for logit in output_logits]
+                    probabilities = [
+                            probabilities[i][xrange(BATCH_SIZE), decoder_inputs[i]]
+                            for i in xrange(len(decoder_inputs))]
+                elif FLAGS.custom_decoder == "mmi":
+                    probabilities = [softmax(logit) for logit in output_logits]
+                    probabilities = [
+                            probabilities[i][xrange(BATCH_SIZE), decoder_inputs[i]]
+                            for i in xrange(len(decoder_inputs))]
 
                 decoder_inputs = np.array(decoder_inputs).transpose()
 
@@ -117,7 +131,7 @@ def main():
         fout.flush()
 
 
-def loadModel(session, path, checkpoint_file):
+def loadModel(session, path, checkpoint_file, vocab_prior=None):
     global _buckets
     global max_source_length
     global max_target_length
@@ -133,7 +147,8 @@ def loadModel(session, path, checkpoint_file):
     model = models.chatbot.ChatbotModel(params["vocab_size"], _buckets,
         params["hidden_size"], 1.0, params["num_layers"], params["grad_clip"],
         1, params["learning_rate"], params["lr_decay_factor"], 512, True,
-        with_attention=FLAGS.with_attention)
+        with_attention=FLAGS.with_attention,
+        custom_decoder=FLAGS.custom_decoder, vocab_prior=vocab_prior)
 
     print("Reading model parameters from {0}".format(checkpoint_file))
     model.saver.restore(session, checkpoint_file)
