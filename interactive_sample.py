@@ -64,15 +64,17 @@ def main():
 
             outputs = [[]]
             if FLAGS.custom_decoder == "mmi":
-                for i,logit in enumerate(output_logits):
-                        if i < seq2seq.GAMMA:
-                            log_probts = tf.nn.log_softmax(logit)      # p(T|S)
-                            log_probts_sub = tf.subtract(log_probts, tf.scalar_mul(seq2seq.LAMBDA, vocab_prior))   # p(T|S) - λ.p(T)
-                            output = tf.argmax(log_probts_sub, 1)
-                        else:
-                            output = tf.argmax(logit, 1)
-                        outputs[0].append(sess.run(output)[0])
-                        print(outputs[0][-1])
+                output_symbols = output_logits
+                outputs[0] = output_symbols[0]
+#                 for i,logit in enumerate(output_logits):
+#                         if i < seq2seq.GAMMA:
+#                             log_probts = tf.nn.log_softmax(logit)      # p(T|S)
+#                             log_probts_sub = tf.subtract(log_probts, tf.scalar_mul(seq2seq.LAMBDA, vocab_prior))   # p(T|S) - λ.p(T)
+#                             output = tf.argmax(log_probts_sub, 1)
+#                         else:
+#                             output = tf.argmax(logit, 1)
+#                         outputs[0].append(sess.run(output)[0])
+#                         print(outputs[0][-1])
 
             elif FLAGS.custom_decoder == "beam":
                 #print("Second", second[i])

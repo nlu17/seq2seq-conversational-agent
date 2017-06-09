@@ -279,7 +279,7 @@ class ChatbotModel(object):
                 output_feed = [self.beam_path[bucket_id]]  # Loss for this batch.
                 output_feed.append(self.beam_symbol[bucket_id])
             elif self.mmi:
-                output_feed.append(self.mmi_symbol[bucket_id])
+                output_feed = [self.mmi_symbol[bucket_id]]
             else:
                 output_feed = [self.losses[bucket_id]]  # Loss for this batch.
             for l in xrange(decoder_size):  # Output logits.
@@ -291,6 +291,6 @@ class ChatbotModel(object):
             if self.beam_search:
                 return outputs[0], outputs[1], outputs[2:]
             elif self.mmi:
-                return None, outputs[0], outputs[1:]
+                return None, None, outputs[0]
             else:
                 return None, outputs[0], outputs[1:]
