@@ -39,7 +39,7 @@ flags.DEFINE_string("extra_discrete_data", "", "directory to discrete conversati
 flags.DEFINE_string("tokenizer", "basic", "Choice of tokenizer, options are: basic (for now)")
 flags.DEFINE_string("checkpoint_dir", "data/checkpoints/", "Checkpoint dir")
 flags.DEFINE_string("ckpt_file", "", "Checkpoint file")
-flags.DEFINE_string("with_attention", True, "True if the model uses attention")
+flags.DEFINE_boolean("with_attention", True, "True if the model uses attention")
 flags.DEFINE_integer("max_train_data_size", 0,
                      "Limit on the size of training data (0: no limit).")
 flags.DEFINE_integer("steps_per_checkpoint", 200,
