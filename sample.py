@@ -24,7 +24,7 @@ flags = tf.app.flags
 FLAGS = flags.FLAGS
 flags.DEFINE_string('checkpoint_dir', 'data/checkpoints/', 'Directory to store/restore checkpoints')
 flags.DEFINE_string('data_dir', "data/", "Data storage directory")
-flags.DEFINE_string('with_attention', False, "If the model uses attention")
+flags.DEFINE_boolean('with_attention', False, "If the model uses attention")
 flags.DEFINE_string('ckpt_file', '', "Checkpoint file")
 flags.DEFINE_string('output_file', '', 'Name of the file wo write outputs to')
 flags.DEFINE_string('custom_decoder', "default", "model decoder")
